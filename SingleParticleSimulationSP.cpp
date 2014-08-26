@@ -3,6 +3,7 @@
 #include <string.h>
 #include <iostream>
 #include <fstream>
+#include <time.h>
 #include <sstream>
 #include <math.h>
 #include <boost/filesystem.hpp>
@@ -22,12 +23,14 @@ using namespace std;
 //Function declarations
 string createDataFolder(
         bool respos, double dt, double simtime, double potRange, double potStrength, double boxsize,
-        double particlesize, double rDist, bool potMod, bool steric, bool randomPot, bool hpi, double hpi_u, double hpi_k);
+        double particlesize, double rDist, bool potMod, bool steric, bool randomPot, bool hpi, double hpi_u, double hpi_k, double polymersize);
 void settingsFile(
         string folder, bool respos, double particlesize, double boxsize, double timestep, double runs, double steps,
-        double potStrength, double potRange, double rDist, bool potMod, bool recordMFP, bool steric, bool randomPot, bool hpi, double hpi_u, double hpi_k);
-void printReport(bool resetPos, int entry, int opposite, int sides, const double timestep[], const double urange[], const double ustrength[], const double rodDist[], const double particlesize[], unsigned int runs,
-        int tsize, int rsize, int ssize, int dsize, int psize, bool potMod, bool steric, bool randomPot, bool hpi, double hpi_u, double hpi_k);
+        double potStrength, double potRange, double rDist, bool potMod, bool recordMFP, bool steric, bool randomPot, bool hpi, double hpi_u,
+		double hpi_k, double polymersize, double executiontime);
+void printReport(bool resetPos, int entry, int opposite, int sides, const double timestep[], const double urange[], const double ustrength[], 
+        const double rodDist[], const double particlesize[], unsigned int runs, int tsize, int rsize, int ssize, int dsize, int psize, bool potMod, 
+        bool steric, bool randomPot, bool hpi, double hpi_u, double hpi_k, double polymersize);
 
 template<typename T>
 string toString(const T& value);
@@ -41,6 +44,10 @@ size_t sizeOfArray( const T(&)[ N ] );
 
 
 int main(int argc, const char* argv[]){
+	// measure runtime of the simulation
+	clock_t start, end;
+	start = clock();
+	
     //Main includes the iteration loops for the simulation
 
     //NOTE: so far wallcrossings is added for all runs!!! makes it kind of incorrect, since after each run, ppos is reset.
@@ -80,9 +87,22 @@ int main(int argc, const char* argv[]){
     double ustrength = atof( argv[boolpar+8] );
 	double hpi_u = atof( argv[boolpar+9] );
 	double hpi_k = atof( argv[boolpar+10] );
+	double polymersize = atof( argv[boolpar+11] );   // diameter of polymer chains, i.e. edgeparticles
     unsigned int saveInt;
     int instValIndex;                             //Counter for addInstantValue
+	double HI = false;
 
+	//HI
+	if (polymersize != 0){
+		if (fmod(10, polymersize) != 0) {
+			cerr << "Error; bad polymersize! (Nonzero modulus when dividing 10)" << endl;
+			exit(1);
+		}
+		HI = true;
+		includeSteric = true;
+	}
+	
+	
 	
 	
     //MFP
@@ -97,7 +117,8 @@ int main(int argc, const char* argv[]){
     saveInt = steps/instantvalues;
         
     //Create data folders and print location as string to string "folder"
-    string folder = createDataFolder(resetPos, timestep, simtime, urange, ustrength, boxsize, particlesize, rodDist, potentialMod, includeSteric, ranPot, hpi, hpi_u, hpi_k);
+    string folder = createDataFolder(resetPos, timestep, simtime, urange, ustrength, boxsize, particlesize, rodDist, potentialMod, 
+	                                 includeSteric, ranPot, hpi, hpi_u, hpi_k, polymersize);
 
 
     //initialize averages
@@ -111,11 +132,11 @@ int main(int argc, const char* argv[]){
     CAverage mfp_xyz;
     if ( recordMFP ) mfp_xyz = CAverage("mfp_xyz", folder, 1, 1);
 
-
+    
     //initialize instance of configuration
     CConfiguration conf = CConfiguration(timestep, urange, ustrength, boxsize, rodDist, potentialMod, particlesize, recordPosHisto, includeSteric,
-    ranPot, hpi , hpi_u, hpi_k);
-
+    ranPot, hpi , hpi_u, hpi_k, polymersize);
+		
 
     //create file to save the trajectory
     string traj_file = folder + "/Coordinates/single_traj.xyz";
@@ -138,7 +159,8 @@ int main(int argc, const char* argv[]){
 
 
         for (int i = 0; i < steps; i++){  //calculate stochastic force first, then mobility force!!
-
+			
+			cout << "run " << i << endl;
 
             conf.calcStochasticForces();
 
@@ -182,20 +204,20 @@ int main(int argc, const char* argv[]){
             conf.makeStep();    //move particle at the end of iteration
 
             
-            if (includeSteric && conf.testOverlap()) conf.moveBack();   //TODO steric2
-            else conf.checkBoxCrossing();
+            //if (includeSteric && conf.testOverlap()) conf.moveBack();   //TODO steric2
+            //else conf.checkBoxCrossing();
             
 
 
 
-            /*    //TODO steric
+                //TODO steric
             while (includeSteric && conf.testOverlap()){
                 conf.moveBack();
                 conf.calcStochasticForces();
                 conf.makeStep();
             }
             conf.checkBoxCrossing(); //check if particle has crossed the confinement of the box
-            */   
+            
 
 
 
@@ -226,9 +248,11 @@ int main(int argc, const char* argv[]){
 
     
 	cout << "Simulation Finished" << endl;
+	end = clock();
 	
 	//If settingsFile is saved, then the simulation was successfull
-    settingsFile(folder, resetPos, particlesize, boxsize, timestep, runs, steps, ustrength, urange, rodDist, potentialMod, recordMFP, includeSteric, ranPot ,hpi, hpi_u, hpi_k);
+    settingsFile(folder, resetPos, particlesize, boxsize, timestep, runs, steps, ustrength, urange, rodDist, 
+	potentialMod, recordMFP, includeSteric, ranPot ,hpi, hpi_u, hpi_k, polymersize, (double)(end-start)/(CLOCKS_PER_SEC*3600));
 	
 	
     return 0;
@@ -246,7 +270,8 @@ int main(int argc, const char* argv[]){
 
 
 string createDataFolder(bool resetpos, double timestep, double simtime, double potRange, double potStrength,
-        double boxsize, double particlesize, double rDist, bool potMod, bool steric, bool randomPot, bool hpi, double hpi_u, double hpi_k){
+        double boxsize, double particlesize, double rDist, bool potMod, bool steric, bool randomPot, bool hpi, double hpi_u, double hpi_k,
+		double polymersize){
     //NOTE: Maybe I can leave out dt, as soon as I settled on a timestep
     //NOTE: As soon as I create input-list with variables, I must change this function
     char range[5];
@@ -255,12 +280,13 @@ string createDataFolder(bool resetpos, double timestep, double simtime, double p
     string folder = "sim_data";
     if (!resetpos) folder = folder + "/noreset";
     if (randomPot) folder = folder + "/ranPot";
-    if (steric) folder = folder + "/steric2";    //TODO steric2
+    if (steric) folder = folder + "/steric";    //TODO steric2
     if (potMod) folder = folder +  "/potMod";   //"/potMod";  TODO!!! Bessel
 	if (hpi) folder = folder + "/HPI/hpiu" + toString(hpi_u) + "/hpik" + toString(hpi_k);
     folder = folder
             + "/dt" + toString(timestep)
             + "/t" + toString(simtime)
+			+ "/a" + toString(polymersize)
             + "/d" + toString(rDist)
             + "/b" + toString(boxsize)
             + "/p" + toString(particlesize)
@@ -273,12 +299,16 @@ string createDataFolder(bool resetpos, double timestep, double simtime, double p
 }
 
 
-void settingsFile(string folder, bool resetpos, double particlesize, double boxsize, double timestep, double runs, double steps, double potStrength, double potRange, double rDist,
-        bool potMod, bool recordMFP, bool steric, bool randomPot, bool hpi, double hpi_u, double hpi_k){
+void settingsFile(string folder, bool resetpos, double particlesize, double boxsize, double timestep, double runs, double steps, 
+    double potStrength, double potRange, double rDist, bool potMod, bool recordMFP, bool steric, bool randomPot, bool hpi, double hpi_u, double hpi_k, 
+	double polymersize, double executiontime){
     //Creates a file where the simulation settings are stored
     //MAYBE ALSO INCLUDE TIME AND DATE!!
     ofstream settingsfile;
     settingsfile.open((folder + "/sim_Settings.txt").c_str());
+    settingsfile << "Time required for execution: "
+    << executiontime 
+    << " hours." << "\n\n";
     settingsfile << "Sim dir: " << folder << endl;
     settingsfile << "ResetPos " << resetpos << endl;
     settingsfile << "potMod " << potMod << endl;//" (Bessel)" << endl;  //TODO Bessel!
@@ -286,7 +316,7 @@ void settingsFile(string folder, bool resetpos, double particlesize, double boxs
     settingsfile << "includesteric " << steric << endl;
 	settingsfile << "ranPot " << randomPot  << endl;
 	settingsfile << "HPI " << hpi  << endl;
-	if (hpi = true){
+	if (hpi == true){
 		settingsfile << "hpi_u " << randomPot  << endl;
 		settingsfile << "hpi_ k " << randomPot  << endl;
     }
@@ -295,7 +325,8 @@ void settingsFile(string folder, bool resetpos, double particlesize, double boxs
 	settingsfile << "b " << boxsize << endl;
     settingsfile << "dt " << timestep  << endl << "runs " << runs << endl << "steps " << steps << endl << "time: " << timestep*steps << endl;
     settingsfile << "k " << potRange << endl << "U_0 " << potStrength << endl;
-    
+	settingsfile << "a" << polymersize << endl;
+	    
     settingsfile.close();
 }
 

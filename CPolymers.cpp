@@ -94,7 +94,7 @@ void CPolymers::printSignFile(const string a_w){
     string name = "polymercharge.xyz";
     FILE *f = fopen(name.c_str(), a_w.c_str());
 
-    fprintf(f, "%d\n%s (%8.3f %8.3f %8.3f)\n", 36, "sim_name", 10, 10, 10);
+    fprintf(f, "%d\n%s (%8.3f %8.3f %8.3f)\n", 36, "sim_name", 10.0, 10.0, 10.0);
 	
     double L1[] = {0, 10, 0, 10};  //these two arrays are only needed for the iteration.
     double L2[] = {0, 0, 10, 10};

@@ -137,10 +137,10 @@ void CAverage::saveAverageInstantValues(double timeInt) {                       
         _instantValues.clear();
     }
 }
-/*
+*/
 
+// save Pushed Back instant values to file 
 
-/* save Pushed Back instant values to file */
 void CAverage::saveAverageFPValue(double posInt) {
     //timeInt is the interval between the times that an average instant value was saved
     int size = _instantValues.size();

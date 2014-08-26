@@ -1,5 +1,8 @@
 #include "headers/CConfiguration.h"
+#include "headers/CholDecomp.h"
 
+
+using namespace ublas;
 
 using namespace std;
 
@@ -11,10 +14,12 @@ CConfiguration::CConfiguration(){
 
 CConfiguration::CConfiguration(
         double timestep,  double potRange,  double potStrength,  double boxsize, double rodDistance, const bool potMod,
-        double psize, const bool posHisto, const bool steric, const bool ranU, bool hpi, double hpi_u, double hpi_k){
+        double psize, const bool posHisto, const bool steric, const bool ranU, bool hpi, double hpi_u, double hpi_k,
+		double polymersize)
+		{
     _potRange = potRange;
     _potStrength = potStrength;
-    _pradius = psize/2;
+    _pradius = psize/2;   //_pradius is now the actual radius of the particle. hence, I need to change the definition of the LJ potential to include (_pradius + _polyrad)   -  or maybe leave LJ pot out
     _boxsize = boxsize;
     _resetpos = _boxsize/2;
     _timestep = timestep;
@@ -39,6 +44,7 @@ CConfiguration::CConfiguration(
     }
 
     if (posHisto) initPosHisto();
+	
 
     // This is for inclusion of 2nd Order rods if k is 0.2b or larger
     _min = -1, _max = 3;
@@ -50,7 +56,17 @@ CConfiguration::CConfiguration(
     // seed = 0:  use time, else any integer
     // init random number generator
     setRanNumberGen(0);
-
+	
+	// init HI vectors matrices, etc
+	_tracerMM = identity_matrix<double> (3);   
+	_polyrad = polymersize / 2;   //This is needed for testOverlap for steric
+    if (polymersize != 0) _HI = true;
+	if (_HI) {
+		_edgeParticles = (int) (10/polymersize);
+		_epos.resize(3 * _edgeParticles - 2);
+		initConstMobilityMatrix();
+		_LJPot = false;
+	}
 
 }
 
@@ -62,23 +78,35 @@ void CConfiguration::updateStartpos(){
     }
 }
 
-void CConfiguration::resetposition(){
-    //Reset the position after every run.
-    for (int i = 0; i < 3; i++){
-        _entryside[i] = 0;
-        _startpos[i] = _resetpos;
-        _ppos[i] = _resetpos;
-        _boxnumberXYZ[i] = 0;
-    }
-}
 
 
 void CConfiguration::makeStep(){
     //move the particle according to the forces and record trajectory like watched by outsider
-    for (int i = 0; i < 3; i++){
-        _prevpos[i] = _ppos[i];
-        _ppos[i] += _timestep * _f_mob[i] + _mu_sto * _f_sto[i];
-    }
+//	if (_HI){
+	cout << _tracerMM << endl;  //TODO del
+	
+		ublas::vector<double> F(3,0.0);
+	    for (int i = 0; i < 3; i++){
+			F(i) = _f_mob[i];
+	        _prevpos[i] = _ppos[i];
+	    }
+		ublas::vector<double> MMdotF (3, 0.0);
+		
+		noalias(MMdotF) = prod(_tracerMM,F);
+		
+		// Update particle position
+		for (int i = 0; i < 3; i++){
+		    _ppos[i] += MMdotF(i) * _timestep + _f_sto(i) * _mu_sto;
+		}
+		
+/*	}
+	else{
+	    for (int i = 0; i < 3; i++){
+	        _prevpos[i] = _ppos[i];
+	        _ppos[i] += _timestep * _f_mob[i] + _mu_sto * _f_sto[i];
+	    }
+	}
+  */  
 }
 
 void CConfiguration::checkBoxCrossing(){
@@ -123,14 +151,36 @@ void CConfiguration::countWallCrossing(int crossaxis, int exitmarker){
 
 
 void CConfiguration::calcStochasticForces(){
-
     // the variate generator uses m_igen (int rand number generator),
     // samples from normal distribution with variance 1 (later sqrt(2) is multiplied)
     boost::variate_generator<boost::mt19937&, boost::normal_distribution<double> > ran_gen(
             *m_igen, boost::normal_distribution<double>(0, 1));
+	
+	ublas::vector<double> ran_v(3);
+	ran_v.clear();
+	
+    ran_v(0) = ran_gen();
+	ran_v(1) = ran_gen();
+	ran_v(2) = ran_gen();
+    
+	if (_HI){  		
+		// taken from matthias:
+		// init lower triangular matrix L(3Nx3N) and stand norm dist rand vector ran_v(3N)
+		triangular_matrix<double, lower> L(3, 3);
+		L.clear();
 
-    for (int i = 0; i < 3; i++) {
-        _f_sto[i] = ran_gen();
+		size_t res = cholesky_decompose(_tracerMM, L);
+		// test wheter decomposition was correct...
+		if(res != 0) {
+			cout << "Decomposition failed in row "<< res - 1 << " !"<< endl;
+		}
+
+		// return correlated random vector, which is scaled later by sqrt(2 dt)
+		noalias(_f_sto) = prod(L, ran_v);		
+	}
+
+    else { // no HI
+        noalias(_f_sto) = ran_v;
     }
 }
 
@@ -207,6 +257,9 @@ void CConfiguration::calcMobilityForces(){
         }
     }
     _upot = Epot;
+	
+	// calc HI mobility matrix here, since it needs to be defined for random force normalisation
+	if (_HI){ calcTracerMobilityMatrix(); }
 }
 
 
@@ -346,7 +399,7 @@ bool CConfiguration::testOverlap(){
                     if (i == 0) r_k -= _rodDistance;
                 }
                 r_abs = sqrt(r_i * r_i + r_k * r_k); //distance to the rods
-                if (r_abs < _pradius) overlaps = true;
+                if (r_abs < (_pradius + _polyrad)) overlaps = true;
             }
         }
     }
@@ -360,6 +413,180 @@ void CConfiguration::calcLJPot(const double r, double& U, double& Fr){
     U += 4 * ( por6*por6 - por6 + 0.25 );
     Fr +=  24 / ( r * r ) * ( 2 * por6*por6 - por6 );
 }
+
+//**************************** HYDRODYNAMICS ****************************************************//
+
+void CConfiguration::initConstMobilityMatrix(){
+	double rxi = 0.0, ryi = 0.0, rzi = 0.0;
+	double rxij = 0.0, ryij = 0.0, rzij = 0.0;
+	double rij = 0.0, rijsq = 0.0;
+	
+	// ublas-vector for outer product in muij
+	ublas::vector<double> vec_rij(3, 0.0);
+	
+	// create mobility matrix - Some elements remain constant throughout the simulation. Those are stored here.
+	_mobilityMatrix = identity_matrix<double>(3 * (3 * _edgeParticles - 1));
+	
+	// set _edgeParticles positions _pos to zero
+	for (int i = 0; i < 3 * _edgeParticles - 2; i++){
+	        _epos[i].fill(0);
+	}
+	
+	// store the edgeParticle positions, so that I can simply loop through them later
+	for (int i = 1; i < _edgeParticles; i++){
+		double tmp = i * 2 * _polyrad;
+		_epos[i][0] = tmp;
+		_epos[i + (_edgeParticles - 1)][1] = tmp;  
+		_epos[i + 2 * (_edgeParticles - 1)][2] = tmp;
+	}
+	
+	// on-diagonal elements are self mobilities. Thus = 1 for tracer and lambda = p/a for edgeparticles
+	//_mobilityMatrix(0,0) = 1;  //already taken care of due to identity matrix?
+	//_mobilityMatrix(1,1) = 1;
+	//_mobilityMatrix(2,2) = 1;
+		
+	for (unsigned int i = 1; i < 3 * _edgeParticles - 1 ; i++) {
+		unsigned int i_count = 3 * i;
+
+		double povera = _pradius/_polyrad;
+		_mobilityMatrix(i_count,i_count) = povera;
+		_mobilityMatrix(i_count+1,i_count+1) = povera;
+		_mobilityMatrix(i_count+2,i_count+2) = povera;
+	}
+	
+	// The mobility matrix elements for the interacting edgeParticles are stored here, since they do not change
+	for (unsigned int i = 0; i < 3 * _edgeParticles - 2; i++){
+		rxi = _epos[i][0];
+		ryi = _epos[i][1];
+		rzi = _epos[i][2];
+		unsigned int i_count = 3 * (i + 1);       // plus 1 is necessary due to omitted tracer particle
+		
+		for (unsigned int j = i + 1; j < 3 * _edgeParticles - 2; j++) {
+			rxij = rxi - _epos[j][0];
+			ryij = ryi - _epos[j][1];
+			rzij = rzi - _epos[j][2];
+			unsigned int  j_count = 3 * (j + 1);    // plus 1 is necessary due to omitted tracer particle
+
+			rijsq = rxij * rxij + ryij * ryij + rzij * rzij;
+
+			rij = sqrt(rijsq);
+		
+		/*
+		 * Calculation of Rotne-Prager Tensor
+		 */
+			matrix<double> muij (3,3,0.0);
+			vec_rij(0) = rxij;
+			vec_rij(1) = ryij;
+			vec_rij(2) = rzij;
+			
+			noalias(muij) = RotnePrager(rij,rijsq,vec_rij);
+			
+			// only lower triangular of symmetric matrix is filled and used
+			noalias(subrange(_mobilityMatrix, j_count, j_count + 3, i_count, i_count + 3)) = muij;
+		}
+	}		
+}
+
+
+void CConfiguration::calcTracerMobilityMatrix(){
+	double rxij = 0.0, ryij = 0.0, rzij = 0.0;
+	double rij = 0.0, rijsq = 0.0;
+		
+	// ublas-vector for outer product in muij
+	ublas::vector<double> vec_rij(3, 0.0);
+	
+// loop over tracer - particle mobility matrix elements
+	for (unsigned int j = 0; j < 3 * _edgeParticles - 2; j++){
+		rxij = _ppos[0] - _epos[j][0];
+		ryij = _ppos[1] - _epos[j][1];
+		rzij = _ppos[2] - _epos[j][2];
+		unsigned int j_count = 3 * (j + 1); //  plus 1 is necessary due to omitted tracer particle
+
+		rijsq = rxij * rxij + ryij * ryij + rzij * rzij;
+
+		rij = sqrt(rijsq);
+		
+	/*
+	 * Calculation of different particle width Rotne-Prager Tensor
+	 */
+		matrix<double> muij (3,3,0.0);
+		vec_rij(0) = rxij;
+		vec_rij(1) = ryij;
+		vec_rij(2) = rzij;
+		
+		noalias(muij) = RotnePragerDiffRad(rij,rijsq,vec_rij);
+		
+		// only lower triangular of symmetric matrix is filled and used
+		noalias(subrange(_mobilityMatrix, j_count, j_count + 3, 0, 3)) = muij;
+	}		
+	// create resistance matrix - Some elements remain constant throughout the simulation. Those are stored here.
+	matrix<double> resistanceMatrix = identity_matrix<double> (3 * (3 * _edgeParticles - 1));
+	matrix<double> mobM = _mobilityMatrix;
+
+	//cout << _mobilityMatrix << endl;  //TODO del
+	
+	
+	bool inverted;
+	// invert full mobility matrix to obtain resistance matrix
+	cout << "invert mobMat" << endl;
+	inverted = InvertMatrix(mobM, resistanceMatrix);
+	cout << "inverted" << endl;
+	if (!inverted){
+		cout << "ERROR: Could not invert mobility matrix!" << endl;
+		exit (EXIT_FAILURE);
+	}
+	// invert 3x3 submatrix of resistance matrix to obtain single particle mobility matrix
+	matrix<double> submobil (3,3);
+	matrix<double> submatrix = subrange(resistanceMatrix,0,3,0,3);
+	inverted = InvertMatrix(submatrix,submobil);
+	if (!inverted){
+		cout << "ERROR: Could not invert resistance submatrix!" << endl;
+		exit (EXIT_FAILURE);
+	}
+	noalias(_tracerMM) = submobil;
+
+	cout << _tracerMM << endl;  //TODO del
+	
+	
+}
+
+
+matrix<double> CConfiguration::RotnePrager(const double & r, const double & rsq,
+										   const ublas::vector<double> & rij) {
+	matrix<double> I = identity_matrix<double>(3);
+
+	double c1 = 0.75 * _polyrad / r; 	//3. * a / (4. * r);
+	double c2 = 2. * _polyrad * _polyrad / rsq;	
+	return c1*( (1.+c2/3)*I + prod( (1.-c2)*I , matrix<double>(outer_prod(rij,rij)) / rsq));
+}
+
+matrix<double> CConfiguration::RotnePragerDiffRad(const double & r, const double & rsq,
+										          const ublas::vector<double> & rij) {
+	matrix<double> I = identity_matrix<double>(3);
+
+	double c1 = 0.75 * _pradius / r; 	//3. * _p/2 / (4. * _r);
+	double c2 = (_polyrad * _polyrad + _pradius * _pradius) / rsq;  
+	return c1*( (1.+c2/3)*I + prod( (1.-c2)*I , matrix<double>(outer_prod(rij,rij)) / rsq));
+}
+
+template<class T> 
+bool CConfiguration::InvertMatrix (const ublas::matrix<T>& input, ublas::matrix<T>& inverse) { 
+    typedef ublas::permutation_matrix<std::size_t> pmatrix; 
+    // create a working copy of the input 
+    matrix<T> A(input); 
+    // create a permutation matrix for the LU-factorization 
+    pmatrix pm(A.size1()); 
+    // perform LU-factorization 
+    int res = lu_factorize(A,pm); 
+    if( res != 0 )
+        return false; 
+    // create identity matrix of "inverse" 
+    inverse.assign(ublas::identity_matrix<T>(A.size1())); 
+    // backsubstitute to get the inverse 
+    lu_substitute(A, pm, inverse); 
+    return true; 
+}
+
 
 //****************************POS HISTOGRAM****************************************************//
 
@@ -414,26 +641,25 @@ void CConfiguration::printHistoMatrix(string folder){
 
 
 
-void CConfiguration::calc_1RODONLY_MobilityForces(){   //see OldCode
-}
-
-
-
-void CConfiguration::calc_ZRODONLY_MobilityForces(){   //see OldCode
-}
-
-
-
-void CConfiguration::calc_YZRODONLY_MobilityForces(){   //see OldCode
-}
-
+/*
 double CConfiguration::getDisplacement(){
-    double d = 0;
+   FAULTY, _f_mob is now a ublas::vector !!!!  double d = 0;
     for (int i = 0; i < 3; i++){
         d += pow((_timestep * _f_mob[i] + _mu_sto * _f_sto[i]), 2);
     }
-    return sqrt(d);
+    return sqrt(d); 
+} */
+
+void CConfiguration::resetposition(){
+    //Reset the position after every run.
+    for (int i = 0; i < 3; i++){
+        _entryside[i] = 0;
+        _startpos[i] = _resetpos;
+        _ppos[i] = _resetpos;
+        _boxnumberXYZ[i] = 0;
+    }
 }
+
 
 /*
 void CConfiguration::calcMobilityForces(){
@@ -549,4 +775,5 @@ void CConfiguration::calcMobilityForces(){
     _upot = Epot;
 }
 */
+
 

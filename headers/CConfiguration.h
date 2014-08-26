@@ -1,8 +1,10 @@
 #ifndef CCONFIGURATION_H_
 #define CCONFIGURATION_H_
 
+#include <stdlib.h>     /* exit, EXIT_FAILURE */
 #include <string>
 #include <vector>
+#include <array>
 #include <time.h>
 #include <iostream>
 #include <fstream>
@@ -11,10 +13,23 @@
 #include <boost/random.hpp>
 #include <boost/random/normal_distribution.hpp>
 #include <boost/math/special_functions/bessel.hpp>
+
+ #include <boost/numeric/ublas/vector.hpp>
+ #include <boost/numeric/ublas/vector_proxy.hpp>
+#include <boost/numeric/ublas/assignment.hpp>
+ #include <boost/numeric/ublas/matrix.hpp>
+ #include <boost/numeric/ublas/lu.hpp>
+ #include <boost/numeric/ublas/io.hpp>
+#include <boost/numeric/ublas/symmetric.hpp>
+#include <boost/numeric/ublas/matrix_proxy.hpp>
+#include <boost/numeric/ublas/triangular.hpp> 
+
+
 #include "CPolymers.h"
 
 
-using namespace std;
+
+namespace ublas = boost::numeric::ublas;
 
 class CConfiguration {
     /*Class where all the configuration variables such as potRange etc. and also most functions for the
@@ -53,7 +68,7 @@ private:
     double _resetpos;
     double _startpos[3];          //Stores where the particle starting position was. This is needed to calculate the mean square displacement
     double _prevpos[3];           //Stores previous particle position before particle is moved.
-    vector<vector<vector<int> > > _posHistoM;
+    std::vector<std::vector<std::vector<int> > > _posHistoM;
 
     int _min, _max;        // parameters for determining up to which order neighboring rods are considered for the potential
 
@@ -61,7 +76,15 @@ private:
     double _ppos[3];    //initialize particle position (DO IT LIKE resetpos FOR MOVEPARTICLEFOLLOW/RESET)
     double _upot;
     double _f_mob[3];   //store mobility and stochastic force
-    double _f_sto[3];
+    ublas::vector<double> _f_sto = ublas::vector<double>(3);
+	
+	//HI Paramters
+	std::vector<std::array<double, 3> > _epos;
+	ublas::symmetric_matrix<double> _mobilityMatrix;
+	ublas::matrix<double> _tracerMM;      //TODO symmetric?
+	bool _HI;
+	double _polyrad;
+	int _edgeParticles;
 
 
     boost::mt19937 *m_igen;                      //generate instance of random number generator "twister".
@@ -77,6 +100,12 @@ private:
     void modifyPot(double& U, double& Fr, double dist);
     void calcLJPot(const double r, double &U, double &dU);
     void initPosHisto();
+	template<class T> 
+	bool InvertMatrix(const ublas::matrix<T>& input, ublas::matrix<T>& inverse);
+	ublas::matrix<double> RotnePragerDiffRad(const double & r, const double & rsq, const ublas::vector<double> & rij);
+	ublas::matrix<double> RotnePrager(const double & r, const double & rsq, const ublas::vector<double> & rij);
+	void calcTracerMobilityMatrix();
+	void initConstMobilityMatrix();
 
 
 
@@ -85,7 +114,7 @@ public:
     CConfiguration();
     CConfiguration(
             double timestep,  double potRange,  double potStrength,  double boxsize, double rodDistance, const bool potMod, double psize,
-            const bool posHisto, const bool steric, const bool ranU,  bool hpi, double hpi_u, double hpi_k);
+            const bool posHisto, const bool steric, const bool ranU,  bool hpi, double hpi_u, double hpi_k, double polymersize);
     void resetParameters(double timestep, double potRange, double potStrength, double boxsize);
     void updateStartpos();
     void resetposition();
@@ -93,16 +122,13 @@ public:
     void checkBoxCrossing();
     void calcStochasticForces();
     void calcMobilityForces();
-    void calc_1RODONLY_MobilityForces();
-    void calc_ZRODONLY_MobilityForces();
-    void calc_YZRODONLY_MobilityForces();
     void saveXYZTraj(string name, const int& move, string a_w);
     void positionHistogram(double block, double possq, double pposprev, int l, int posHisto[]);
 
     double getPosVariance();
     double get1DPosVariance(int dim);
     double getUpot(){ return _upot; }
-    double getDisplacement();
+  //  double getDisplacement();
     unsigned int getwallcrossings(int i){ return _wallcrossings[i]; }
     bool checkFirstPassage(double mfpPos, int dim);
     bool testOverlap();
