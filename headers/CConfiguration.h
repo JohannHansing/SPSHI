@@ -14,12 +14,12 @@
 #include <boost/random/normal_distribution.hpp>
 #include <boost/math/special_functions/bessel.hpp>
 
- #include <boost/numeric/ublas/vector.hpp>
- #include <boost/numeric/ublas/vector_proxy.hpp>
+#include <boost/numeric/ublas/vector.hpp>
+#include <boost/numeric/ublas/vector_proxy.hpp>
 #include <boost/numeric/ublas/assignment.hpp>
- #include <boost/numeric/ublas/matrix.hpp>
- #include <boost/numeric/ublas/lu.hpp>
- #include <boost/numeric/ublas/io.hpp>
+#include <boost/numeric/ublas/matrix.hpp>
+#include <boost/numeric/ublas/lu.hpp>
+#include <boost/numeric/ublas/io.hpp>
 #include <boost/numeric/ublas/symmetric.hpp>
 #include <boost/numeric/ublas/matrix_proxy.hpp>
 #include <boost/numeric/ublas/triangular.hpp> 
@@ -81,7 +81,7 @@ private:
 	//HI Paramters
 	std::vector<std::array<double, 3> > _epos;
 	ublas::symmetric_matrix<double> _mobilityMatrix;
-	ublas::matrix<double> _tracerMM;      //TODO symmetric?
+	ublas::symmetric_matrix<double> _tracerMM;      //TODO symmetric?
 	bool _HI;
 	double _polyrad;
 	int _edgeParticles;
@@ -106,6 +106,9 @@ private:
 	ublas::matrix<double> RotnePrager(const double & r, const double & rsq, const ublas::vector<double> & rij);
 	void calcTracerMobilityMatrix();
 	void initConstMobilityMatrix();
+	template<class MATRIX>
+	bool CholInvertPart (const MATRIX& A, MATRIX& partInv) ;
+	//bool CholInvertPart (const ublas::matrix<T>& input, ublas::matrix<T>& partInv);
 
 
 

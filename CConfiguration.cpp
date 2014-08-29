@@ -1,5 +1,6 @@
 #include "headers/CConfiguration.h"
 #include "headers/CholDecomp.h"
+#include <boost/timer.hpp>
 
 
 using namespace ublas;
@@ -520,34 +521,37 @@ void CConfiguration::calcTracerMobilityMatrix(){
 		noalias(subrange(_mobilityMatrix, j_count, j_count + 3, 0, 3)) = muij;
 	}		
 	// create resistance matrix - Some elements remain constant throughout the simulation. Those are stored here.
-	matrix<double> resistanceMatrix = identity_matrix<double> (3 * (3 * _edgeParticles - 1));
-	matrix<double> mobM = _mobilityMatrix;
-
-	//cout << _mobilityMatrix << endl;  //TODO del
-	
-	
 	bool inverted;
+	/*
 	// invert full mobility matrix to obtain resistance matrix
-	cout << "invert mobMat" << endl;
+	matrix<double> resistanceMatrix = identity_matrix<double> (3 * (3 * _edgeParticles - 1));
+	boost::timer  t1;  //TODO del
+	t1.restart();
 	inverted = InvertMatrix(mobM, resistanceMatrix);
-	cout << "inverted" << endl;
+	double prec = t1.elapsed();  //TODO del
+	std::cout << " (LU inversion: " << prec << " sec)" << std::flush;   //TODO del
+	matrix<double> submatrix = subrange(resistanceMatrix,0,3,0,3);
+	*/
+		
+	//CholInvert
+	symmetric_matrix<double> partResMat(3);
+	inverted = CholInvertPart(_mobilityMatrix, partResMat);    
+	//inverted = CholInvertPart(_mobilityMatrix, partInv);  // for this I need to change function CholInvertPart to template<class MATRIX> (like cholesky_decompose) and maybe partResMat to symmetric_matrix
+	
 	if (!inverted){
 		cout << "ERROR: Could not invert mobility matrix!" << endl;
 		exit (EXIT_FAILURE);
 	}
+	
 	// invert 3x3 submatrix of resistance matrix to obtain single particle mobility matrix
-	matrix<double> submobil (3,3);
-	matrix<double> submatrix = subrange(resistanceMatrix,0,3,0,3);
-	inverted = InvertMatrix(submatrix,submobil);
+	symmetric_matrix<double> submobil (3);
+	inverted = CholInvertPart(partResMat,submobil);
 	if (!inverted){
 		cout << "ERROR: Could not invert resistance submatrix!" << endl;
 		exit (EXIT_FAILURE);
 	}
+	
 	noalias(_tracerMM) = submobil;
-
-	cout << _tracerMM << endl;  //TODO del
-	
-	
 }
 
 
@@ -585,6 +589,37 @@ bool CConfiguration::InvertMatrix (const ublas::matrix<T>& input, ublas::matrix<
     // backsubstitute to get the inverse 
     lu_substitute(A, pm, inverse); 
     return true; 
+}
+
+
+
+template<class MATRIX>
+bool CConfiguration::CholInvertPart (const MATRIX& A, MATRIX& partInv) {
+    using namespace boost::numeric::ublas;
+	
+	// make sure partInv is 3x3 matrix and A is NxN with N larger 2
+	assert( A.size1() > 2);
+	assert( A.size1() == A.size2());
+	assert( partInv.size1() == 3 );
+	assert( partInv.size2() == 3 );
+
+    triangular_matrix<double, lower> L(A.size1(), A.size1());
+    L.clear();
+    // perform cholesky decomposition
+    size_t res = cholesky_decompose(A, L);
+
+    ublas::vector<double> b (A.size1());
+
+    for (int i = 0; i < 3; i++){
+        std::fill(b.begin(), b.end(), 0.0);  //make b zero vector
+        b(i)=1;                              //make b unit vector in direction i
+        inplace_solve(L, b, lower_tag() );
+        inplace_solve(trans(L), b, upper_tag() );
+        partInv(i, 0) = b(0);
+        partInv(i, 1) = b(1);
+        partInv(i, 2) = b(2);
+    }
+    return true;
 }
 
 
@@ -774,6 +809,39 @@ void CConfiguration::calcMobilityForces(){
     }
     _upot = Epot;
 }
+
+
+template<class T>
+bool CConfiguration::CholInvertPart (const matrix<T>& input, matrix<T>& partInv) {
+    using namespace boost::numeric::ublas;
+    if (partInv.size1() != 3) { cout << "Error Bad partInv size" << endl; exit(EXIT_FAILURE); }
+    // create a working copy of the input
+    matrix<T> A(input);
+
+    triangular_matrix<double, lower> L(A.size1(), A.size1());
+    L.clear();
+    // perform cholesky decomposition
+    size_t res = cholesky_decompose(A, L);
+
+    // create 3x3 identity matrix of "partInv"
+ //   partInv.assign(identity_matrix<T>(3));
+
+    ublas::vector<double> b (A.size1());
+
+    for (int i = 0; i < 3; i++){
+        std::fill(b.begin(), b.end(), 0.0);  //make b zero vector
+        b(i)=1;                              //make b unit vector in direction i
+        inplace_solve(L, b, lower_tag() );
+        inplace_solve(trans(L), b, upper_tag() );
+        partInv(i, 0) = b(0);
+        partInv(i, 1) = b(1);
+        partInv(i, 2) = b(2);
+    }
+    return true;
+}
+
+
 */
+
 
 
