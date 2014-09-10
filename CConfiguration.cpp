@@ -57,6 +57,15 @@ CConfiguration::CConfiguration(
     // seed = 0:  use time, else any integer
     // init random number generator
     setRanNumberGen(0);
+    
+    //Ewald sum stuff
+    _nmax = 2; // This corresponds to a cutoff of r_cutoff = 1 * _boxsize
+	_alpha = sqrt(M_PI) / _boxsize; // This value for alpha corresponds to the suggestion in Beenakker1986
+	_k_cutoff = 2. * _alpha * _alpha * _nmax * _boxsize;   /* This corresponds to suggestion by Jain2012 ( equation 15 and 16 ). */
+	_nkmax = (int) (_k_cutoff * _boxsize / (2. * M_PI) + 0.5);   /* The last bit (+0.5) may be needed to ensure that the next higher integer 
+		                                                   * k value is taken for kmax */
+	_r_cutoffsq = pow(_nmax * _boxsize, 2);   // Like Jain2012, r_cutoff is chosen such that exp(-(r_cutoff * alpha)^2) is small
+		
 	
 	// init HI vectors matrices, etc
 	_tracerMM = identity_matrix<double> (3);   
@@ -419,18 +428,15 @@ void CConfiguration::calcLJPot(const double r, double& U, double& Fr){
 
 void CConfiguration::initConstMobilityMatrix(){
 	double rxi = 0.0, ryi = 0.0, rzi = 0.0;
-	double rxij = 0.0, ryij = 0.0, rzij = 0.0;
 	double rij = 0.0, rijsq = 0.0;
-	
-	// ublas-vector for outer product in muij
-	ublas::vector<double> vec_rij(3, 0.0);
+	const double asq = _polyrad * _polyrad;
 	
 	// create mobility matrix - Some elements remain constant throughout the simulation. Those are stored here.
 	_mobilityMatrix = identity_matrix<double>(3 * (3 * _edgeParticles - 1));
 	
 	// set _edgeParticles positions _pos to zero
 	for (int i = 0; i < 3 * _edgeParticles - 2; i++){
-	        _epos[i].fill(0);
+	    _epos[i].fill(0);
 	}
 	
 	// store the edgeParticle positions, so that I can simply loop through them later
@@ -445,17 +451,26 @@ void CConfiguration::initConstMobilityMatrix(){
 	//_mobilityMatrix(0,0) = 1;  //already taken care of due to identity matrix?
 	//_mobilityMatrix(1,1) = 1;
 	//_mobilityMatrix(2,2) = 1;
+	
+    // ublas-vector for interparticle distance. Needs to initialized as zero vector for self mobilities.
+	ublas::vector<double> vec_rij(3, 0.0);
+	
+	matrix<double> selfmob = realSpcSm( vec_rij, true, asq ) + reciprocalSpcSm( vec_rij, asq );
+	double self_plus = _pradius/_polyrad + _pradius / sqrt (M_PI) * ( - 6. * _alpha );  //TODO  alt
+	//double self_plus = _pradius/_polyrad + _pradius / sqrt (M_PI) * ( - 6. * _alpha + 40. * pow(_alpha,3) * _polyrad * _polyrad / 3. );
+	selfmob(0,0) += self_plus;
+	selfmob(1,1) += self_plus;
+	selfmob(2,2) += self_plus;
 		
 	for (unsigned int i = 1; i < 3 * _edgeParticles - 1 ; i++) {
 		unsigned int i_count = 3 * i;
-
-		double povera = _pradius/_polyrad;
-		_mobilityMatrix(i_count,i_count) = povera;
-		_mobilityMatrix(i_count+1,i_count+1) = povera;
-		_mobilityMatrix(i_count+2,i_count+2) = povera;
+		/*_mobilityMatrix(0,0) = 1;  already taken care of due to identity matrix. The extra F_i0 part in the Ewald sum is only correction to reciprocal sum.
+		 * I leave out the reciprocal summation for the tracer particle self diff, because it is in only in the simulation box unit cell. */
+				
+		noalias(subrange( _mobilityMatrix, i_count, i_count + 3, i_count, i_count + 3 )) = selfmob;		
 	}
 	
-	// The mobility matrix elements for the interacting edgeParticles are stored here, since they do not change
+	// The mobility matrix elements for the interacting edgeParticles are stored here, since they do not change position
 	for (unsigned int i = 0; i < 3 * _edgeParticles - 2; i++){
 		rxi = _epos[i][0];
 		ryi = _epos[i][1];
@@ -463,24 +478,19 @@ void CConfiguration::initConstMobilityMatrix(){
 		unsigned int i_count = 3 * (i + 1);       // plus 1 is necessary due to omitted tracer particle
 		
 		for (unsigned int j = i + 1; j < 3 * _edgeParticles - 2; j++) {
-			rxij = rxi - _epos[j][0];
-			ryij = ryi - _epos[j][1];
-			rzij = rzi - _epos[j][2];
+			vec_rij(0) = rxi - _epos[j][0];
+			vec_rij(1) = ryi - _epos[j][1];
+			vec_rij(2) = rzi - _epos[j][2];
 			unsigned int  j_count = 3 * (j + 1);    // plus 1 is necessary due to omitted tracer particle
-
-			rijsq = rxij * rxij + ryij * ryij + rzij * rzij;
-
-			rij = sqrt(rijsq);
 		
 		/*
-		 * Calculation of Rotne-Prager Tensor
+		 * Calculation of RP Ewald sum
 		 */
 			matrix<double> muij (3,3,0.0);
-			vec_rij(0) = rxij;
-			vec_rij(1) = ryij;
-			vec_rij(2) = rzij;
-			
-			noalias(muij) = RotnePrager(rij,rijsq,vec_rij);
+			noalias(muij) = realSpcSm( vec_rij, false, asq ) + reciprocalSpcSm( vec_rij, asq );
+	//		cout << vec_rij << endl;
+	//		cout << muij << endl; // TODO del
+	//		cout << "real: " << realSpcSm( vec_rij, false ) << " ---- reciprocal: " << reciprocalSpcSm( vec_rij, false ) << endl;
 			
 			// only lower triangular of symmetric matrix is filled and used
 			noalias(subrange(_mobilityMatrix, j_count, j_count + 3, i_count, i_count + 3)) = muij;
@@ -492,34 +502,28 @@ void CConfiguration::initConstMobilityMatrix(){
 void CConfiguration::calcTracerMobilityMatrix(){
 	double rxij = 0.0, ryij = 0.0, rzij = 0.0;
 	double rij = 0.0, rijsq = 0.0;
+	const double asq = (_polyrad * _polyrad + _pradius * _pradius)/2;
 		
 	// ublas-vector for outer product in muij
 	ublas::vector<double> vec_rij(3, 0.0);
 	
 // loop over tracer - particle mobility matrix elements
 	for (unsigned int j = 0; j < 3 * _edgeParticles - 2; j++){
-		rxij = _ppos[0] - _epos[j][0];
-		ryij = _ppos[1] - _epos[j][1];
-		rzij = _ppos[2] - _epos[j][2];
+		vec_rij(0) = _ppos[0] - _epos[j][0];
+		vec_rij(1) = _ppos[1] - _epos[j][1];
+		vec_rij(2) = _ppos[2] - _epos[j][2];
 		unsigned int j_count = 3 * (j + 1); //  plus 1 is necessary due to omitted tracer particle
-
-		rijsq = rxij * rxij + ryij * ryij + rzij * rzij;
-
-		rij = sqrt(rijsq);
 		
-	/*
-	 * Calculation of different particle width Rotne-Prager Tensor
-	 */
+		
+	    // Calculation of different particle width Rotne-Prager Ewald sum 
 		matrix<double> muij (3,3,0.0);
-		vec_rij(0) = rxij;
-		vec_rij(1) = ryij;
-		vec_rij(2) = rzij;
-		
-		noalias(muij) = RotnePragerDiffRad(rij,rijsq,vec_rij);
+		noalias(muij) = realSpcSm( vec_rij, false, asq ) + reciprocalSpcSm( vec_rij, asq );
 		
 		// only lower triangular of symmetric matrix is filled and used
 		noalias(subrange(_mobilityMatrix, j_count, j_count + 3, 0, 3)) = muij;
 	}		
+	//cout << _mobilityMatrix << endl;
+	
 	// create resistance matrix - Some elements remain constant throughout the simulation. Those are stored here.
 	bool inverted;
 	/*
@@ -535,9 +539,10 @@ void CConfiguration::calcTracerMobilityMatrix(){
 		
 	//CholInvert
 	symmetric_matrix<double> partResMat(3);
+//	cout << "invert b4" << endl; // todo del
 	inverted = CholInvertPart(_mobilityMatrix, partResMat);    
 	//inverted = CholInvertPart(_mobilityMatrix, partInv);  // for this I need to change function CholInvertPart to template<class MATRIX> (like cholesky_decompose) and maybe partResMat to symmetric_matrix
-	
+	cout << "invert ok" << endl; // todo del
 	if (!inverted){
 		cout << "ERROR: Could not invert mobility matrix!" << endl;
 		exit (EXIT_FAILURE);
@@ -554,6 +559,99 @@ void CConfiguration::calcTracerMobilityMatrix(){
 	noalias(_tracerMM) = submobil;
 }
 
+//----------------------- Ewald sum ------------------------
+
+matrix<double> CConfiguration::realSpcSm( const ublas::vector<double> & rij, const bool self, const double asq ){  // This should be distance of particles
+    const int nmax = _nmax;
+	const double r_cutoffsq = _r_cutoffsq;
+    // TODO nmax !!!
+	ublas::vector<double> nvec(3);
+	ublas::vector<double> rn_vec(3);
+	matrix<double> Mreal = zero_matrix<double>(3,3);
+	for (int n1 = -nmax; n1 <= nmax; n1++){
+		for (int n2 = -nmax; n2 <= nmax; n2++){
+		    for (int n3 = -nmax; n3 <= nmax; n3++){
+				// CASE n ==(0, 0, 0) and nu == eta 
+				if (n1 == 0 && n2 == 0 && n3 == 0 && self) continue;
+				else{
+					nvec(0) = n1; 
+					nvec(1) = n2; 
+					nvec(2) = n3;
+					noalias(rn_vec) = rij + nvec * _boxsize;
+					const double rsq = inner_prod(rn_vec,rn_vec);
+	                if ( rsq <= r_cutoffsq ){ 
+						noalias(Mreal) += realSpcM(rsq, rn_vec, self, asq);
+					}
+				}
+			}
+		}
+	}
+	return Mreal;
+}
+
+
+matrix<double> CConfiguration::reciprocalSpcSm( const ublas::vector<double> & rij, const double asq ){  // This should be distance of particles
+	const double k_cutoffsq = pow(_k_cutoff, 2);
+	const int nkmax = _nkmax;
+	const double ntok = 2 * M_PI / _boxsize;
+	ublas::vector<double> kvec(3);
+    matrix<double> Mreciprocal = zero_matrix<double>(3,3);
+    for (int n1 = -nkmax; n1 <= nkmax; n1++){
+        for (int n2 = -nkmax; n2 <= nkmax; n2++){
+            for (int n3 = -nkmax; n3 <= nkmax; n3++){
+				if (n1 == 0 && n2 == 0 && n3 == 0)  continue;
+				else{ 
+	                kvec(0) = n1, kvec(1) = n2, kvec(2) = n3;
+					kvec = kvec * ntok;
+					const double ksq = inner_prod(kvec,kvec);
+                    if ( ksq <= k_cutoffsq ){  
+						noalias(Mreciprocal) += reciprocalSpcM(ksq, kvec, asq) * cos(inner_prod(rij, kvec));
+					}
+				}
+            }
+        }
+    }
+    return Mreciprocal;   // V is taken care of in reciprocalSpcM 
+        
+}
+
+matrix<double> CConfiguration::realSpcM(const double & rsq, const ublas::vector<double> & rij, const bool self, const double asq) {
+    // Idea: To only account for tracer in one box, leave out eta = eta_tracer in sums entirely or something...
+	matrix<double> I = identity_matrix<double>(3);   
+    const double r = sqrt(rsq);
+	const double alpha = _alpha;
+	const double alphasq = alpha * alpha;
+	const double c1 = alphasq * rsq;
+	const double c2 = 4. * alphasq * alphasq * alphasq * rsq * rsq;
+	const double c3 = alphasq * alphasq * rsq;
+	const double c4 = 1./rsq;
+	const double c5 = asq/rsq;
+	const double expc = exp(-c1)/sqrt (M_PI) * alpha;
+	const double erfcc = erfc(alpha * r) / r;
+	
+	return _pradius * ( I * ( erfcc *  ( 0.75 + 0.5 * c5 )
+		+ expc * (3. * c1 - 4.5 + asq * ( c2 - 20. * c3 + 14. * alphasq + c4 )))
+			+ outer_prod(rij,rij) / rsq * (
+				erfcc * ( 0.75 - 3. * c5 ) +
+					expc * ( 1.5 - 3. * c1 + asq * (- c2 + 16. * c3 - 2. * alphasq - 3. * c4))));
+}
+
+
+matrix<double> CConfiguration::reciprocalSpcM(const double ksq, const ublas::vector<double> & kij, const double asq) {
+    matrix<double> I = identity_matrix<double>(3);
+	const double alphasq = _alpha * _alpha;
+	const double V = pow( _boxsize, 3);
+    const double c1 = ksq / ( 4. * alphasq );
+	
+	//return _pradius * ( 1. - 0.333333 * asq * ksq ) * ( 1. + c1 + 2. * c1 * c1 ) * ( 6. * M_PI / (ksq * V)) * exp( -c1 ) * ( I - outer_prod(kij,kij)/ksq);
+		//alternative way from Brady1988 TODO alt
+	return _pradius  * ( 1. + c1 + 2. * c1 * c1 ) 
+		* ( 6. * M_PI / (ksq * V)) * exp( - c1 ) * ( I - outer_prod(kij,kij)/ksq);
+}
+
+
+//----------------------- Rotne Prager ------------------------
+
 
 matrix<double> CConfiguration::RotnePrager(const double & r, const double & rsq,
 										   const ublas::vector<double> & rij) {
@@ -562,6 +660,7 @@ matrix<double> CConfiguration::RotnePrager(const double & r, const double & rsq,
 	double c1 = 0.75 * _polyrad / r; 	//3. * a / (4. * r);
 	double c2 = 2. * _polyrad * _polyrad / rsq;	
 	return c1*( (1.+c2/3)*I + prod( (1.-c2)*I , matrix<double>(outer_prod(rij,rij)) / rsq));
+	                         // = outer_prod(v1,v2) * (1-c2)  works also for the second part of this eq.
 }
 
 matrix<double> CConfiguration::RotnePragerDiffRad(const double & r, const double & rsq,
@@ -613,7 +712,9 @@ bool CConfiguration::CholInvertPart (const MATRIX& A, MATRIX& partInv) {
     for (int i = 0; i < 3; i++){
         std::fill(b.begin(), b.end(), 0.0);  //make b zero vector
         b(i)=1;                              //make b unit vector in direction i
+		cout << "solve b4 "<< endl;
         inplace_solve(L, b, lower_tag() );
+		cout << "solve ok "<< endl;
         inplace_solve(trans(L), b, upper_tag() );
         partInv(i, 0) = b(0);
         partInv(i, 1) = b(1);

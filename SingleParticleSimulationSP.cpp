@@ -295,6 +295,14 @@ string createDataFolder(bool resetpos, double timestep, double simtime, double p
     boost::filesystem::create_directories(folder);
     boost::filesystem::create_directory(folder + "/InstantValues");
     boost::filesystem::create_directory(folder + "/Coordinates");
+    cout << "/dt "  << toString(timestep) << endl;
+    cout << "/t "  << toString(simtime) << endl;
+	cout << "/a "  << toString(polymersize) << endl;
+    cout << "/d "  << toString(rDist) << endl;
+    cout << "/b "  << toString(boxsize) << endl;
+    cout << "/p "  << toString(particlesize) << endl;
+    cout << "/k "  << range << endl;
+    cout << "/u "  << toString(potStrength) << endl;
     return folder;
 }
 

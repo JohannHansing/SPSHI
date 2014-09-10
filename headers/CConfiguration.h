@@ -85,6 +85,14 @@ private:
 	bool _HI;
 	double _polyrad;
 	int _edgeParticles;
+	
+	
+	// Ewald sum parameters
+	int _nmax;
+	int _nkmax;
+	double _alpha;
+	double _r_cutoffsq;
+	double _k_cutoff;
 
 
     boost::mt19937 *m_igen;                      //generate instance of random number generator "twister".
@@ -108,7 +116,10 @@ private:
 	void initConstMobilityMatrix();
 	template<class MATRIX>
 	bool CholInvertPart (const MATRIX& A, MATRIX& partInv) ;
-	//bool CholInvertPart (const ublas::matrix<T>& input, ublas::matrix<T>& partInv);
+	ublas::matrix<double> realSpcSm( const ublas::vector<double> & rij, const bool self, const double asq );
+	ublas::matrix<double> reciprocalSpcSm( const ublas::vector<double> & rij, const double asq );
+	ublas::matrix<double> realSpcM(const double & rsq, const ublas::vector<double> & rij, const bool self, const double asq);
+	ublas::matrix<double> reciprocalSpcM(const double ksq, const ublas::vector<double> & kij,  const double asq);
 
 
 
