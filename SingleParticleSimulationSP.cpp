@@ -46,7 +46,6 @@ size_t sizeOfArray( const T(&)[ N ] );
 int main(int argc, const char* argv[]){
 	// measure runtime of the simulation
 	clock_t start, end;
-	start = clock();
 	
     //Main includes the iteration loops for the simulation
 
@@ -144,12 +143,15 @@ int main(int argc, const char* argv[]){
 
 
     //cout << "Starting Run Number: " << simcounter << " out of " << totalsims << endl;
+	start = clock();
     cout << "Starting Simulation!" << endl;
-
-
+    
+	unsigned int stepcount = 0;
+    ofstream trajectoryfile;
+    trajectoryfile.open((folder + "/Coordinates/trajectory.txt").c_str());
+    
 // **************START OF RUNS-LOOP
     for (int l = 0; l<runs; l++){
-
 
         if (resetPos) conf.resetposition();         
         else conf.updateStartpos();
@@ -158,9 +160,11 @@ int main(int argc, const char* argv[]){
         int fpCounter[3] = {0};                  //counter for first passage times (next point to pass first: fpCounter*fpInt
 
 
-        for (int i = 0; i < steps; i++){  //calculate stochastic force first, then mobility force!!
-			
-			cout << "run " << i << endl;
+
+
+        for (int i = 0; i < steps; i++){  //calculate stochastic force first, then mobility force!!						
+		    // calc HI mobility matrix here, since it needs to be defined for random force normalisation
+		    if (HI && ( i%10 == 0) ){ conf.calcTracerMobilityMatrix(); }
 
             conf.calcStochasticForces();
 
@@ -199,16 +203,14 @@ int main(int argc, const char* argv[]){
                     }
                 }
             }
-
-
+			
+			stepcount++;
             conf.makeStep();    //move particle at the end of iteration
 
             
             //if (includeSteric && conf.testOverlap()) conf.moveBack();   //TODO steric2
             //else conf.checkBoxCrossing();
             
-
-
 
                 //TODO steric
             while (includeSteric && conf.testOverlap()){
@@ -220,7 +222,10 @@ int main(int argc, const char* argv[]){
             
 
 
-
+            if (stepcount%1000 == 0) {
+				std::vector<double> ppos = conf.getppos();
+				trajectoryfile << stepcount * timestep << "\t" << ppos[0] << " " << ppos[1] << " " << ppos[2] << endl;
+			}
             if (((i % 5) == 0) && recordPosHisto) conf.addHistoValue();
 
         }
@@ -249,10 +254,14 @@ int main(int argc, const char* argv[]){
     
 	cout << "Simulation Finished" << endl;
 	end = clock();
+	double runtime = (double)((end-start)/(CLOCKS_PER_SEC));
+	cout << runtime << " seconds runtime." << endl;
 	
 	//If settingsFile is saved, then the simulation was successfull
     settingsFile(folder, resetPos, particlesize, boxsize, timestep, runs, steps, ustrength, urange, rodDist, 
-	potentialMod, recordMFP, includeSteric, ranPot ,hpi, hpi_u, hpi_k, polymersize, (double)(end-start)/(CLOCKS_PER_SEC*3600));
+	potentialMod, recordMFP, includeSteric, ranPot ,hpi, hpi_u, hpi_k, polymersize, (runtime/3600));
+	
+	trajectoryfile.close();
 	
 	
     return 0;
@@ -278,7 +287,7 @@ string createDataFolder(bool resetpos, double timestep, double simtime, double p
     sprintf(range, "%.3f", potRange);
     //In the definition of folder, the addition has to START WITH A STRING! for the compiler to know what to do (left to right).
     string folder = "sim_data";
-    if (!resetpos) folder = folder + "/noreset";
+    if (!resetpos) folder = folder + "/0.8noreset";
     if (randomPot) folder = folder + "/ranPot";
     if (steric) folder = folder + "/steric";    //TODO steric2
     if (potMod) folder = folder +  "/potMod";   //"/potMod";  TODO!!! Bessel
@@ -295,14 +304,6 @@ string createDataFolder(bool resetpos, double timestep, double simtime, double p
     boost::filesystem::create_directories(folder);
     boost::filesystem::create_directory(folder + "/InstantValues");
     boost::filesystem::create_directory(folder + "/Coordinates");
-    cout << "/dt "  << toString(timestep) << endl;
-    cout << "/t "  << toString(simtime) << endl;
-	cout << "/a "  << toString(polymersize) << endl;
-    cout << "/d "  << toString(rDist) << endl;
-    cout << "/b "  << toString(boxsize) << endl;
-    cout << "/p "  << toString(particlesize) << endl;
-    cout << "/k "  << range << endl;
-    cout << "/u "  << toString(potStrength) << endl;
     return folder;
 }
 
@@ -326,7 +327,7 @@ void settingsFile(string folder, bool resetpos, double particlesize, double boxs
 	settingsfile << "HPI " << hpi  << endl;
 	if (hpi == true){
 		settingsfile << "hpi_u " << randomPot  << endl;
-		settingsfile << "hpi_ k " << randomPot  << endl;
+		settingsfile << "hpi_k " << randomPot  << endl;
     }
     settingsfile << "d " << rDist << endl;
     settingsfile << "p " << particlesize << endl;

@@ -60,11 +60,12 @@ CConfiguration::CConfiguration(
     
     //Ewald sum stuff
     _nmax = 2; // This corresponds to a cutoff of r_cutoff = 1 * _boxsize
-	_alpha = sqrt(M_PI) / _boxsize; // This value for alpha corresponds to the suggestion in Beenakker1986
+	_alpha = 0.8 * sqrt(M_PI) / _boxsize; // This value for alpha corresponds to the suggestion in Beenakker1986
 	_k_cutoff = 2. * _alpha * _alpha * _nmax * _boxsize;   /* This corresponds to suggestion by Jain2012 ( equation 15 and 16 ). */
 	_nkmax = (int) (_k_cutoff * _boxsize / (2. * M_PI) + 0.5);   /* The last bit (+0.5) may be needed to ensure that the next higher integer 
 		                                                   * k value is taken for kmax */
 	_r_cutoffsq = pow(_nmax * _boxsize, 2);   // Like Jain2012, r_cutoff is chosen such that exp(-(r_cutoff * alpha)^2) is small
+	cout << "alpha = 0.8 sqrt(M_PI) / _boxsize" << endl;
 		
 	
 	// init HI vectors matrices, etc
@@ -93,7 +94,6 @@ void CConfiguration::updateStartpos(){
 void CConfiguration::makeStep(){
     //move the particle according to the forces and record trajectory like watched by outsider
 //	if (_HI){
-	cout << _tracerMM << endl;  //TODO del
 	
 		ublas::vector<double> F(3,0.0);
 	    for (int i = 0; i < 3; i++){
@@ -269,7 +269,7 @@ void CConfiguration::calcMobilityForces(){
     _upot = Epot;
 	
 	// calc HI mobility matrix here, since it needs to be defined for random force normalisation
-	if (_HI){ calcTracerMobilityMatrix(); }
+	//if (_HI){ calcTracerMobilityMatrix(); }
 }
 
 
@@ -542,7 +542,7 @@ void CConfiguration::calcTracerMobilityMatrix(){
 //	cout << "invert b4" << endl; // todo del
 	inverted = CholInvertPart(_mobilityMatrix, partResMat);    
 	//inverted = CholInvertPart(_mobilityMatrix, partInv);  // for this I need to change function CholInvertPart to template<class MATRIX> (like cholesky_decompose) and maybe partResMat to symmetric_matrix
-	cout << "invert ok" << endl; // todo del
+//	cout << "invert ok" << endl; // todo del
 	if (!inverted){
 		cout << "ERROR: Could not invert mobility matrix!" << endl;
 		exit (EXIT_FAILURE);
@@ -712,9 +712,9 @@ bool CConfiguration::CholInvertPart (const MATRIX& A, MATRIX& partInv) {
     for (int i = 0; i < 3; i++){
         std::fill(b.begin(), b.end(), 0.0);  //make b zero vector
         b(i)=1;                              //make b unit vector in direction i
-		cout << "solve b4 "<< endl;
+//		cout << "solve b4 "<< endl;
         inplace_solve(L, b, lower_tag() );
-		cout << "solve ok "<< endl;
+//		cout << "solve ok "<< endl;
         inplace_solve(trans(L), b, upper_tag() );
         partInv(i, 0) = b(0);
         partInv(i, 1) = b(1);
@@ -770,6 +770,15 @@ void CConfiguration::printHistoMatrix(string folder){
 
 
     matrixfile.close();
+}
+
+ 
+std::vector<double> CConfiguration::getppos(){ // returns pointer to current particle position array
+	std::vector<double> pos (3);
+	for (int i = 0; i < 3; i++){
+		pos[i] = _ppos[i] + _boxsize * _boxnumberXYZ[i];
+	}
+	return pos;
 }
 
 

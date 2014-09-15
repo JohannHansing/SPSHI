@@ -112,7 +112,6 @@ private:
 	bool InvertMatrix(const ublas::matrix<T>& input, ublas::matrix<T>& inverse);
 	ublas::matrix<double> RotnePragerDiffRad(const double & r, const double & rsq, const ublas::vector<double> & rij);
 	ublas::matrix<double> RotnePrager(const double & r, const double & rsq, const ublas::vector<double> & rij);
-	void calcTracerMobilityMatrix();
 	void initConstMobilityMatrix();
 	template<class MATRIX>
 	bool CholInvertPart (const MATRIX& A, MATRIX& partInv) ;
@@ -140,6 +139,7 @@ public:
     void positionHistogram(double block, double possq, double pposprev, int l, int posHisto[]);
 
     double getPosVariance();
+	std::vector<double> getppos();
     double get1DPosVariance(int dim);
     double getUpot(){ return _upot; }
   //  double getDisplacement();
@@ -149,6 +149,8 @@ public:
     void moveBack();
     void addHistoValue();
     void printHistoMatrix(string folder);
+	
+	void calcTracerMobilityMatrix();
 
 
 
