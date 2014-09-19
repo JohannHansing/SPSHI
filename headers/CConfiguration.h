@@ -76,7 +76,7 @@ private:
     double _ppos[3];    //initialize particle position (DO IT LIKE resetpos FOR MOVEPARTICLEFOLLOW/RESET)
     double _upot;
     double _f_mob[3];   //store mobility and stochastic force
-    ublas::vector<double> _f_sto = ublas::vector<double>(3);
+    ublas::vector<double> _f_sto;
 	
 	//HI Paramters
 	std::vector<std::array<double, 3> > _epos;

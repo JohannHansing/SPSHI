@@ -32,6 +32,7 @@ CConfiguration::CConfiguration(
     _hpi = hpi;
     _upot = 0;
     _mu_sto = sqrt( 2 * _timestep );                 //timestep for stochastic force
+	_f_sto.resize(3);
 	_hpi = hpi; 
 	_hpi_u = hpi_u;
 	_hpi_k = hpi_k;
@@ -60,12 +61,11 @@ CConfiguration::CConfiguration(
     
     //Ewald sum stuff
     _nmax = 2; // This corresponds to a cutoff of r_cutoff = 1 * _boxsize
-	_alpha = 0.8 * sqrt(M_PI) / _boxsize; // This value for alpha corresponds to the suggestion in Beenakker1986
+	_alpha = sqrt(M_PI) / _boxsize; // This value for alpha corresponds to the suggestion in Beenakker1986
 	_k_cutoff = 2. * _alpha * _alpha * _nmax * _boxsize;   /* This corresponds to suggestion by Jain2012 ( equation 15 and 16 ). */
 	_nkmax = (int) (_k_cutoff * _boxsize / (2. * M_PI) + 0.5);   /* The last bit (+0.5) may be needed to ensure that the next higher integer 
 		                                                   * k value is taken for kmax */
 	_r_cutoffsq = pow(_nmax * _boxsize, 2);   // Like Jain2012, r_cutoff is chosen such that exp(-(r_cutoff * alpha)^2) is small
-	cout << "alpha = 0.8 sqrt(M_PI) / _boxsize" << endl;
 		
 	
 	// init HI vectors matrices, etc
@@ -73,7 +73,7 @@ CConfiguration::CConfiguration(
 	_polyrad = polymersize / 2;   //This is needed for testOverlap for steric
     if (polymersize != 0) _HI = true;
 	if (_HI) {
-		_edgeParticles = (int) (10/polymersize);
+		_edgeParticles = (int) (_boxsize/polymersize);
 		_epos.resize(3 * _edgeParticles - 2);
 		initConstMobilityMatrix();
 		_LJPot = false;
@@ -391,7 +391,7 @@ void CConfiguration::modifyPot(double& U, double& Fr, double dist){
 
 bool CConfiguration::testOverlap(){
     //Function to check, whether the diffusing particle of size psize is overlapping with any one of the rods (edges of the box)
-    //most if borrowed from moveParticleAndWatch()
+    //mostly borrowed from moveParticleAndWatch()
     bool overlaps = false;
     double r_i = 0, r_k = 0;
     double r_abs = 0;
@@ -409,9 +409,14 @@ bool CConfiguration::testOverlap(){
                     if (i == 0) r_k -= _rodDistance;
                 }
                 r_abs = sqrt(r_i * r_i + r_k * r_k); //distance to the rods
-                if (r_abs < (_pradius + _polyrad)) overlaps = true;
+                if (r_abs <= (_pradius + _polyrad)){
+					overlaps = true;
+				    continue;
+				}
             }
+			if (overlaps == true) continue;
         }
+		if (overlaps == true) continue;
     }
     return overlaps;
 }
@@ -796,13 +801,20 @@ double CConfiguration::getDisplacement(){
 } */
 
 void CConfiguration::resetposition(){
-    //Reset the position after every run.
-    for (int i = 0; i < 3; i++){
-        _entryside[i] = 0;
-        _startpos[i] = _resetpos;
-        _ppos[i] = _resetpos;
-        _boxnumberXYZ[i] = 0;
-    }
+    //Reset the position to random (allowed) position in cell.
+    boost::random::mt19937 rng;    
+	boost::uniform_01<boost::mt19937&> zeroone(*m_igen);
+	bool overlap = true;
+	while (overlap == true){
+	    for (int i = 0; i < 3; i++){
+	        _entryside[i] = 0;
+			double ranPos = zeroone();
+	        _startpos[i] = ranPos;
+	        _ppos[i] = ranPos;
+	        _boxnumberXYZ[i] = 0;
+	    }
+		overlap = testOverlap();
+	}
 }
 
 

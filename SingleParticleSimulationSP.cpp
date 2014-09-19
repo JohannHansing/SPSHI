@@ -114,6 +114,7 @@ int main(int argc, const char* argv[]){
     
     steps = simtime/timestep;
     saveInt = steps/instantvalues;
+	const int trajout = (int)(1/timestep);
         
     //Create data folders and print location as string to string "folder"
     string folder = createDataFolder(resetPos, timestep, simtime, urange, ustrength, boxsize, particlesize, rodDist, potentialMod, 
@@ -160,7 +161,7 @@ int main(int argc, const char* argv[]){
         int fpCounter[3] = {0};                  //counter for first passage times (next point to pass first: fpCounter*fpInt
 
 
-
+        if (l%100 == 0) cout << "run " << l << endl;
 
         for (int i = 0; i < steps; i++){  //calculate stochastic force first, then mobility force!!						
 		    // calc HI mobility matrix here, since it needs to be defined for random force normalisation
@@ -222,12 +223,11 @@ int main(int argc, const char* argv[]){
             
 
 
-            if (stepcount%1000 == 0) {
+            if (stepcount%trajout == 0) {
 				std::vector<double> ppos = conf.getppos();
 				trajectoryfile << stepcount * timestep << "\t" << ppos[0] << " " << ppos[1] << " " << ppos[2] << endl;
 			}
             if (((i % 5) == 0) && recordPosHisto) conf.addHistoValue();
-
         }
     }//----------END OF RUNS-LOOP
 
@@ -287,7 +287,7 @@ string createDataFolder(bool resetpos, double timestep, double simtime, double p
     sprintf(range, "%.3f", potRange);
     //In the definition of folder, the addition has to START WITH A STRING! for the compiler to know what to do (left to right).
     string folder = "sim_data";
-    if (!resetpos) folder = folder + "/0.8noreset";
+    if (!resetpos) folder = folder + "/noreset";
     if (randomPot) folder = folder + "/ranPot";
     if (steric) folder = folder + "/steric";    //TODO steric2
     if (potMod) folder = folder +  "/potMod";   //"/potMod";  TODO!!! Bessel
