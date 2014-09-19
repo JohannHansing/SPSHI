@@ -115,6 +115,7 @@ int main(int argc, const char* argv[]){
     steps = simtime/timestep;
     saveInt = steps/instantvalues;
 	const int trajout = (int)(1/timestep);
+	const int MMcalcStep = (int)(0.05/timestep);
         
     //Create data folders and print location as string to string "folder"
     string folder = createDataFolder(resetPos, timestep, simtime, urange, ustrength, boxsize, particlesize, rodDist, potentialMod, 
@@ -165,7 +166,7 @@ int main(int argc, const char* argv[]){
 
         for (int i = 0; i < steps; i++){  //calculate stochastic force first, then mobility force!!						
 		    // calc HI mobility matrix here, since it needs to be defined for random force normalisation
-		    if (HI && ( i%10 == 0) ){ conf.calcTracerMobilityMatrix(); }
+		    if (HI && ( i%MMcalcStep == 0) ){ conf.calcTracerMobilityMatrix(); }
 
             conf.calcStochasticForces();
 
