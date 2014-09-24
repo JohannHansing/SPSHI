@@ -166,7 +166,10 @@ int main(int argc, const char* argv[]){
 
         for (int i = 0; i < steps; i++){  //calculate stochastic force first, then mobility force!!						
 		    // calc HI mobility matrix here, since it needs to be defined for random force normalisation
-		    if (HI && ( i%MMcalcStep == 0) ){ conf.calcTracerMobilityMatrix(); }
+		    if (HI){
+				if ( i%MMcalcStep == 0 ){ conf.calcTracerMobilityMatrix(true); }
+				else { conf.calcTracerMobilityMatrix(false); }
+			}
 
             conf.calcStochasticForces();
 
@@ -339,8 +342,6 @@ void settingsFile(string folder, bool resetpos, double particlesize, double boxs
 	    
     settingsfile.close();
 }
-
-
 
 
 

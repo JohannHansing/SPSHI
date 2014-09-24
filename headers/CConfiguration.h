@@ -81,7 +81,8 @@ private:
 	//HI Paramters
 	std::vector<std::array<double, 3> > _epos;
 	ublas::symmetric_matrix<double> _mobilityMatrix;
-	ublas::symmetric_matrix<double> _tracerMM;      //TODO symmetric?
+	ublas::symmetric_matrix<double> _tracerMM;     
+	ublas::symmetric_matrix<double> _resMNoLub;
 	bool _HI;
 	double _polyrad;
 	int _edgeParticles;
@@ -93,6 +94,10 @@ private:
 	double _alpha;
 	double _r_cutoffsq;
 	double _k_cutoff;
+	
+	//Lubrication parameters
+	int _mmax;
+	double _g[3];
 
 
     boost::mt19937 *m_igen;                      //generate instance of random number generator "twister".
@@ -119,6 +124,9 @@ private:
 	ublas::matrix<double> reciprocalSpcSm( const ublas::vector<double> & rij, const double asq );
 	ublas::matrix<double> realSpcM(const double & rsq, const ublas::vector<double> & rij, const bool self, const double asq);
 	ublas::matrix<double> reciprocalSpcM(const double ksq, const ublas::vector<double> & kij,  const double asq);
+	
+	ublas::symmetric_matrix<double> lub2p( ublas::vector<double> rij, double rsq, unsigned int mmax );
+	ublas::symmetric_matrix<double> lubricate( const ublas::vector<double> & rij );
 
 
 
@@ -149,8 +157,7 @@ public:
     void moveBack();
     void addHistoValue();
     void printHistoMatrix(string folder);
-	
-	void calcTracerMobilityMatrix();
+	void calcTracerMobilityMatrix(bool full);
 
 
 

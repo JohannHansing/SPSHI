@@ -66,10 +66,18 @@ CConfiguration::CConfiguration(
 	_nkmax = (int) (_k_cutoff * _boxsize / (2. * M_PI) + 0.5);   /* The last bit (+0.5) may be needed to ensure that the next higher integer 
 		                                                   * k value is taken for kmax */
 	_r_cutoffsq = pow(_nmax * _boxsize, 2);   // Like Jain2012, r_cutoff is chosen such that exp(-(r_cutoff * alpha)^2) is small
-		
+	
+	
+	// lubrication stuff
+	const double lam = _polyrad/_pradius;
+	const double c1 = pow(1+lam, -3);
+	_g[0] = 2 * pow(lam, 2) * c1;
+	_g[1] = lam/5 * ( 1 + 7*lam + lam*lam ) * c1;
+	_g[2] = 1/42 * ( 1 + lam*(18 - lam*(29 + lam*(18 + lam)))) * c1;
 	
 	// init HI vectors matrices, etc
 	_tracerMM = identity_matrix<double> (3);   
+	_resMNoLub = identity_matrix<double> (3);
 	_polyrad = polymersize / 2;   //This is needed for testOverlap for steric
     if (polymersize != 0) _HI = true;
 	if (_HI) {
@@ -78,7 +86,8 @@ CConfiguration::CConfiguration(
 		initConstMobilityMatrix();
 		_LJPot = false;
 	}
-
+	
+	
 }
 
 void CConfiguration::updateStartpos(){
@@ -231,7 +240,8 @@ void CConfiguration::calcMobilityForces(){
             }
 
             r_abs = sqrt(r_i * r_i + r_k * r_k); //distance to the rods
-
+				
+			
 
             if (_potMod) calculateExpPotentialMOD(r_abs, utmp, frtmp, plane);
             else calculateExpPotential(r_abs, utmp, frtmp);
@@ -504,65 +514,53 @@ void CConfiguration::initConstMobilityMatrix(){
 }
 
 
-void CConfiguration::calcTracerMobilityMatrix(){
-	double rxij = 0.0, ryij = 0.0, rzij = 0.0;
-	double rij = 0.0, rijsq = 0.0;
+
+void CConfiguration::calcTracerMobilityMatrix(bool full){
 	const double asq = (_polyrad * _polyrad + _pradius * _pradius)/2;
 		
 	// ublas-vector for outer product in muij
 	ublas::vector<double> vec_rij(3, 0.0);
+	ublas::symmetric_matrix<double> lubM = zero_matrix<double> (3,3); 
 	
 // loop over tracer - particle mobility matrix elements
 	for (unsigned int j = 0; j < 3 * _edgeParticles - 2; j++){
 		vec_rij(0) = _ppos[0] - _epos[j][0];
 		vec_rij(1) = _ppos[1] - _epos[j][1];
 		vec_rij(2) = _ppos[2] - _epos[j][2];
-		unsigned int j_count = 3 * (j + 1); //  plus 1 is necessary due to omitted tracer particle
 		
-		
-	    // Calculation of different particle width Rotne-Prager Ewald sum 
-		matrix<double> muij (3,3,0.0);
-		noalias(muij) = realSpcSm( vec_rij, false, asq ) + reciprocalSpcSm( vec_rij, asq );
-		
-		// only lower triangular of symmetric matrix is filled and used
-		noalias(subrange(_mobilityMatrix, j_count, j_count + 3, 0, 3)) = muij;
-	}		
-	//cout << _mobilityMatrix << endl;
+		if (full){
+		    // Calculation of different particle width Rotne-Prager Ewald sum 
+			unsigned int j_count = 3 * (j + 1); //  plus 1 is necessary due to omitted tracer particle
+			matrix<double> muij  = realSpcSm( vec_rij, false, asq ) + reciprocalSpcSm( vec_rij, asq );
+	
+			// only lower triangular of symmetric matrix is filled and used
+			noalias(subrange(_mobilityMatrix, j_count, j_count + 3, 0, 3)) = muij;
+		}
+		lubM += lubricate(vec_rij);
+	}
 	
 	// create resistance matrix - Some elements remain constant throughout the simulation. Those are stored here.
 	bool inverted;
-	/*
-	// invert full mobility matrix to obtain resistance matrix
-	matrix<double> resistanceMatrix = identity_matrix<double> (3 * (3 * _edgeParticles - 1));
-	boost::timer  t1;  //TODO del
-	t1.restart();
-	inverted = InvertMatrix(mobM, resistanceMatrix);
-	double prec = t1.elapsed();  //TODO del
-	std::cout << " (LU inversion: " << prec << " sec)" << std::flush;   //TODO del
-	matrix<double> submatrix = subrange(resistanceMatrix,0,3,0,3);
-	*/
-		
-	//CholInvert
-	symmetric_matrix<double> partResMat(3);
-//	cout << "invert b4" << endl; // todo del
-	inverted = CholInvertPart(_mobilityMatrix, partResMat);    
-	//inverted = CholInvertPart(_mobilityMatrix, partInv);  // for this I need to change function CholInvertPart to template<class MATRIX> (like cholesky_decompose) and maybe partResMat to symmetric_matrix
-//	cout << "invert ok" << endl; // todo del
-	if (!inverted){
-		cout << "ERROR: Could not invert mobility matrix!" << endl;
-		exit (EXIT_FAILURE);
+	if (full){ 
+		inverted = CholInvertPart(_mobilityMatrix, _resMNoLub); 
+		if (!inverted){
+			cout << "ERROR: Could not invert mobility matrix!" << endl;
+			exit (EXIT_FAILURE);
+		}
 	}
+	// Add lubrication Part to tracer Resistance Matrix
+	symmetric_matrix<double> tracerResMat = _resMNoLub + lubM;
 	
-	// invert 3x3 submatrix of resistance matrix to obtain single particle mobility matrix
 	symmetric_matrix<double> submobil (3);
-	inverted = CholInvertPart(partResMat,submobil);
+	inverted = CholInvertPart(tracerResMat, submobil);
 	if (!inverted){
 		cout << "ERROR: Could not invert resistance submatrix!" << endl;
 		exit (EXIT_FAILURE);
-	}
-	
+	}	
 	noalias(_tracerMM) = submobil;
 }
+
+
 
 //----------------------- Ewald sum ------------------------
 
@@ -570,19 +568,20 @@ matrix<double> CConfiguration::realSpcSm( const ublas::vector<double> & rij, con
     const int nmax = _nmax;
 	const double r_cutoffsq = _r_cutoffsq;
     // TODO nmax !!!
-	ublas::vector<double> nvec(3);
 	ublas::vector<double> rn_vec(3);
 	matrix<double> Mreal = zero_matrix<double>(3,3);
 	for (int n1 = -nmax; n1 <= nmax; n1++){
+		
+		rn_vec(0) = rij(0) + _boxsize * n1;
 		for (int n2 = -nmax; n2 <= nmax; n2++){
+			
+			rn_vec(1) = rij(1) + _boxsize * n2;
 		    for (int n3 = -nmax; n3 <= nmax; n3++){
+				
 				// CASE n ==(0, 0, 0) and nu == eta 
 				if (n1 == 0 && n2 == 0 && n3 == 0 && self) continue;
-				else{
-					nvec(0) = n1; 
-					nvec(1) = n2; 
-					nvec(2) = n3;
-					noalias(rn_vec) = rij + nvec * _boxsize;
+				else{  
+					rn_vec(2) = rij(2) + _boxsize * n3;
 					const double rsq = inner_prod(rn_vec,rn_vec);
 	                if ( rsq <= r_cutoffsq ){ 
 						noalias(Mreal) += realSpcM(rsq, rn_vec, self, asq);
@@ -606,8 +605,7 @@ matrix<double> CConfiguration::reciprocalSpcSm( const ublas::vector<double> & ri
             for (int n3 = -nkmax; n3 <= nkmax; n3++){
 				if (n1 == 0 && n2 == 0 && n3 == 0)  continue;
 				else{ 
-	                kvec(0) = n1, kvec(1) = n2, kvec(2) = n3;
-					kvec = kvec * ntok;
+	                kvec(0) = n1 * ntok, kvec(1) = n2 * ntok, kvec(2) = n3 * ntok;
 					const double ksq = inner_prod(kvec,kvec);
                     if ( ksq <= k_cutoffsq ){  
 						noalias(Mreciprocal) += reciprocalSpcM(ksq, kvec, asq) * cos(inner_prod(rij, kvec));
@@ -655,27 +653,62 @@ matrix<double> CConfiguration::reciprocalSpcM(const double ksq, const ublas::vec
 }
 
 
-//----------------------- Rotne Prager ------------------------
 
 
-matrix<double> CConfiguration::RotnePrager(const double & r, const double & rsq,
-										   const ublas::vector<double> & rij) {
-	matrix<double> I = identity_matrix<double>(3);
+//------------------------------------- Lubrication Resistance Matrix ------------------------------
 
-	double c1 = 0.75 * _polyrad / r; 	//3. * a / (4. * r);
-	double c2 = 2. * _polyrad * _polyrad / rsq;	
-	return c1*( (1.+c2/3)*I + prod( (1.-c2)*I , matrix<double>(outer_prod(rij,rij)) / rsq));
-	                         // = outer_prod(v1,v2) * (1-c2)  works also for the second part of this eq.
+symmetric_matrix<double> CConfiguration::lubricate( const ublas::vector<double> & rij ){  
+	// Addition to lubrication Matrix for nearest edgeparticles
+	symmetric_matrix<double> lubPart = zero_matrix<double> (3);
+	const double r_cutoffsq = 9*_polyrad;
+    // TODO nmax !!!
+	ublas::vector<double> rn_vec(3);
+	matrix<double> Mreal = zero_matrix<double>(3,3);
+	for (int n1 = -1; n1 <= 1; n1++){
+		rn_vec(0) = rij(0) + _boxsize * n1;
+		for (int n2 = -1; n2 <= 1; n2++){
+			rn_vec(1) = rij(1) + _boxsize * n2; 
+		    for (int n3 = -1; n3 <= 1; n3++){
+				rn_vec(2) = rij(2) + _boxsize * n3;
+				const double rsq = inner_prod(rn_vec,rn_vec);
+                if ( rsq <= r_cutoffsq ){ 
+					if (rsq < r_cutoffsq/2) noalias(lubPart) += lub2p(rn_vec, rsq, 8);
+					else noalias(lubPart) += lub2p(rn_vec, rsq, 5);
+				}
+			}
+		}
+	}
+	return lubPart;
 }
 
-matrix<double> CConfiguration::RotnePragerDiffRad(const double & r, const double & rsq,
-										          const ublas::vector<double> & rij) {
-	matrix<double> I = identity_matrix<double>(3);
-
-	double c1 = 0.75 * _pradius / r; 	//3. * _p/2 / (4. * _r);
-	double c2 = (_polyrad * _polyrad + _pradius * _pradius) / rsq;  
-	return c1*( (1.+c2/3)*I + prod( (1.-c2)*I , matrix<double>(outer_prod(rij,rij)) / rsq));
+ublas::symmetric_matrix<double> CConfiguration::lub2p( ublas::vector<double> rij, double rsq, unsigned int mmax ){
+	// This function returns the 3x3 lubrication part of the resistance matrix of the tracer particle
+	double s = 2*sqrt(rsq)/(_pradius + _polyrad);
+	double c1 = pow(2/s, 2);
+	double Sum1 = - c1 * ( _g[2] + _g[1] );
+	double Sum2 = c1;
+	for (int m = 2; m < mmax; m++){
+		double c2 = pow(c1, m);
+		Sum1 += c2/m * ( 2*_g[2]/(m-1) - _g[1]);
+		Sum2 += c2;
+	}
+	Sum2 = Sum2 * _g[0];
+	symmetric_matrix<double, upper> lubR (3,3);
+	double c3 = - ( _g[1] + _g[2] * ( 1 - c1 ) ) * log( 1 - c1 );
+	double c4 = ( _g[0]/(1-c1) - _g[0] +  2*c3  +  2*Sum1  +  Sum2 ) / (rsq);
+	for (int i = 0; i < 3; i++){
+		for (int j = i; j < 3; j++){
+			lubR(i,j) = rij(i) * rij(j) * c4;
+			if (i == j) lubR(i,j) += c3 + Sum1;
+		}
+	}
+	return lubR * (_pradius + _polyrad)/(2*_pradius);
 }
+
+
+
+
+
 
 template<class T> 
 bool CConfiguration::InvertMatrix (const ublas::matrix<T>& input, ublas::matrix<T>& inverse) { 
@@ -816,6 +849,31 @@ void CConfiguration::resetposition(){
 		overlap = testOverlap();
 	}
 }
+
+
+
+//----------------------- Rotne Prager ------------------------
+
+
+matrix<double> CConfiguration::RotnePrager(const double & r, const double & rsq,
+										   const ublas::vector<double> & rij) {
+	matrix<double> I = identity_matrix<double>(3);
+
+	double c1 = 0.75 * _polyrad / r; 	//3. * a / (4. * r);
+	double c2 = 2. * _polyrad * _polyrad / rsq;	
+	return c1*( (1.+c2/3)*I + prod( (1.-c2)*I , matrix<double>(outer_prod(rij,rij)) / rsq));
+	                         // = outer_prod(v1,v2) * (1-c2)  works also for the second part of this eq.
+}
+
+matrix<double> CConfiguration::RotnePragerDiffRad(const double & r, const double & rsq,
+										          const ublas::vector<double> & rij) {
+	matrix<double> I = identity_matrix<double>(3);
+
+	double c1 = 0.75 * _pradius / r; 	//3. * _p/2 / (4. * _r);
+	double c2 = (_polyrad * _polyrad + _pradius * _pradius) / rsq;  
+	return c1*( (1.+c2/3)*I + prod( (1.-c2)*I , matrix<double>(outer_prod(rij,rij)) / rsq));
+}
+
 
 
 /*
