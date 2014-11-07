@@ -161,8 +161,7 @@ int main(int argc, const char* argv[]){
         instValIndex = 0;
         int fpCounter[3] = {0};                  //counter for first passage times (next point to pass first: fpCounter*fpInt
 
-
-        if (l%100 == 0) cout << "run " << l << endl;
+        if (l%100==0) cout << "run " << l << endl;
 
         for (int i = 0; i < steps; i++){  //calculate stochastic force first, then mobility force!!						
 		    // calc HI mobility matrix here, since it needs to be defined for random force normalisation
@@ -170,6 +169,18 @@ int main(int argc, const char* argv[]){
 				if ( i%MMcalcStep == 0 ){ conf.calcTracerMobilityMatrix(true); }
 				else { conf.calcTracerMobilityMatrix(false); }
 			}
+			/* //TODO Write new update condition:
+			if ( conf.getDispSq() < pow(CUTOFF,2) ){   // This could be, e.g. CUTOFF = 0.05 * particlesize
+			    conf.calcTracerMobilityMatrix(true);
+			    conf.newDispStart();  // Function to reset startpoint for getDispSq()
+			double CConfiguration::getDispSq(){
+			    double dispsq = 0;
+			    for (int i=0; i<3; i++){
+			        dispsq += pow(_ppos[i] - _disp0[i] , 2);
+				}
+			    return dispsq;
+			}
+			*/
 
             conf.calcStochasticForces();
 

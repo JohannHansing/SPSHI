@@ -1,9 +1,10 @@
 #include "headers/CConfiguration.h"
-#include "headers/CholDecomp.h"
 #include <boost/timer.hpp>
+#include <Eigen/Dense>
+#include <Eigen/Cholesky>
 
 
-using namespace ublas;
+using namespace Eigen;
 
 using namespace std;
 
@@ -76,8 +77,6 @@ CConfiguration::CConfiguration(
 	_g[2] = 1/42 * ( 1 + lam*(18 - lam*(29 + lam*(18 + lam)))) * c1;
 	
 	// init HI vectors matrices, etc
-	_tracerMM = identity_matrix<double> (3);   
-	_resMNoLub = identity_matrix<double> (3);
 	_polyrad = polymersize / 2;   //This is needed for testOverlap for steric
     if (polymersize != 0) _HI = true;
 	if (_HI) {
@@ -104,14 +103,13 @@ void CConfiguration::makeStep(){
     //move the particle according to the forces and record trajectory like watched by outsider
 //	if (_HI){
 	
-		ublas::vector<double> F(3,0.0);
+		Vector3d F;
 	    for (int i = 0; i < 3; i++){
 			F(i) = _f_mob[i];
 	        _prevpos[i] = _ppos[i];
 	    }
-		ublas::vector<double> MMdotF (3, 0.0);
+		Vector3d MMdotF = _tracerMM*F;
 		
-		noalias(MMdotF) = prod(_tracerMM,F);
 		
 		// Update particle position
 		for (int i = 0; i < 3; i++){
@@ -175,31 +173,19 @@ void CConfiguration::calcStochasticForces(){
     boost::variate_generator<boost::mt19937&, boost::normal_distribution<double> > ran_gen(
             *m_igen, boost::normal_distribution<double>(0, 1));
 	
-	ublas::vector<double> ran_v(3);
-	ran_v.clear();
+	Vector3d ran_v = Vector3d::Zero();
 	
     ran_v(0) = ran_gen();
 	ran_v(1) = ran_gen();
 	ran_v(2) = ran_gen();
     
-	if (_HI){  		
-		// taken from matthias:
-		// init lower triangular matrix L(3Nx3N) and stand norm dist rand vector ran_v(3N)
-		triangular_matrix<double, lower> L(3, 3);
-		L.clear();
-
-		size_t res = cholesky_decompose(_tracerMM, L);
-		// test wheter decomposition was correct...
-		if(res != 0) {
-			cout << "Decomposition failed in row "<< res - 1 << " !"<< endl;
-		}
-
-		// return correlated random vector, which is scaled later by sqrt(2 dt)
-		noalias(_f_sto) = prod(L, ran_v);		
+	if (_HI){  
+	    // return correlated random vector, which is scaled later by sqrt(2 dt)
+	    _f_sto = _tracerMM.llt().matrixL() * ran_v;
 	}
 
     else { // no HI
-        noalias(_f_sto) = ran_v;
+        _f_sto = ran_v;
     }
 }
 
@@ -447,7 +433,8 @@ void CConfiguration::initConstMobilityMatrix(){
 	const double asq = _polyrad * _polyrad;
 	
 	// create mobility matrix - Some elements remain constant throughout the simulation. Those are stored here.
-	_mobilityMatrix = identity_matrix<double>(3 * (3 * _edgeParticles - 1));
+	int size = 3 * (3 * _edgeParticles - 1);
+	_mobilityMatrix = MatrixXd::Zero(size,size);
 	
 	// set _edgeParticles positions _pos to zero
 	for (int i = 0; i < 3 * _edgeParticles - 2; i++){
@@ -468,9 +455,9 @@ void CConfiguration::initConstMobilityMatrix(){
 	//_mobilityMatrix(2,2) = 1;
 	
     // ublas-vector for interparticle distance. Needs to initialized as zero vector for self mobilities.
-	ublas::vector<double> vec_rij(3, 0.0);
+	Vector3d vec_rij = Vector3d::Zero();
 	
-	matrix<double> selfmob = realSpcSm( vec_rij, true, asq ) + reciprocalSpcSm( vec_rij, asq );
+	Matrix3d selfmob = realSpcSm( vec_rij, true, asq ) + reciprocalSpcSm( vec_rij, asq );
 	double self_plus = _pradius/_polyrad + _pradius / sqrt (M_PI) * ( - 6. * _alpha );  //TODO  alt
 	//double self_plus = _pradius/_polyrad + _pradius / sqrt (M_PI) * ( - 6. * _alpha + 40. * pow(_alpha,3) * _polyrad * _polyrad / 3. );
 	selfmob(0,0) += self_plus;
@@ -482,7 +469,7 @@ void CConfiguration::initConstMobilityMatrix(){
 		/*_mobilityMatrix(0,0) = 1;  already taken care of due to identity matrix. The extra F_i0 part in the Ewald sum is only correction to reciprocal sum.
 		 * I leave out the reciprocal summation for the tracer particle self diff, because it is in only in the simulation box unit cell. */
 				
-		noalias(subrange( _mobilityMatrix, i_count, i_count + 3, i_count, i_count + 3 )) = selfmob;		
+		_mobilityMatrix.block<3,3>(i_count,i_count) = selfmob;		
 	}
 	
 	// The mobility matrix elements for the interacting edgeParticles are stored here, since they do not change position
@@ -501,14 +488,15 @@ void CConfiguration::initConstMobilityMatrix(){
 		/*
 		 * Calculation of RP Ewald sum
 		 */
-			matrix<double> muij (3,3,0.0);
-			noalias(muij) = realSpcSm( vec_rij, false, asq ) + reciprocalSpcSm( vec_rij, asq );
+	        Matrix3d muij = Matrix3d::Zero();
+			muij = realSpcSm( vec_rij, false, asq ) + reciprocalSpcSm( vec_rij, asq );
 	//		cout << vec_rij << endl;
 	//		cout << muij << endl; // TODO del
 	//		cout << "real: " << realSpcSm( vec_rij, false ) << " ---- reciprocal: " << reciprocalSpcSm( vec_rij, false ) << endl;
 			
-			// only lower triangular of symmetric matrix is filled and used
-			noalias(subrange(_mobilityMatrix, j_count, j_count + 3, i_count, i_count + 3)) = muij;
+			// both lower and upper triangular of symmetric matrix need be filled
+			_mobilityMatrix.block<3,3>(j_count,i_count) = selfmob;
+			_mobilityMatrix.block<3,3>(i_count,j_count) = selfmob;
 		}
 	}		
 }
@@ -518,9 +506,9 @@ void CConfiguration::initConstMobilityMatrix(){
 void CConfiguration::calcTracerMobilityMatrix(bool full){
 	const double asq = (_polyrad * _polyrad + _pradius * _pradius)/2;
 		
-	// ublas-vector for outer product in muij
-	ublas::vector<double> vec_rij(3, 0.0);
-	ublas::symmetric_matrix<double> lubM = zero_matrix<double> (3,3); 
+	// vector for outer product in muij
+	Vector3d vec_rij(3);
+	Matrix3d lubM = Matrix3d::Zero(); 
 	
 // loop over tracer - particle mobility matrix elements
 	for (unsigned int j = 0; j < 3 * _edgeParticles - 2; j++){
@@ -531,60 +519,58 @@ void CConfiguration::calcTracerMobilityMatrix(bool full){
 		if (full){
 		    // Calculation of different particle width Rotne-Prager Ewald sum 
 			unsigned int j_count = 3 * (j + 1); //  plus 1 is necessary due to omitted tracer particle
-			matrix<double> muij  = realSpcSm( vec_rij, false, asq ) + reciprocalSpcSm( vec_rij, asq );
+			Matrix3d muij  = realSpcSm( vec_rij, false, asq ) + reciprocalSpcSm( vec_rij, asq );
 	
 			// only lower triangular of symmetric matrix is filled and used
-			noalias(subrange(_mobilityMatrix, j_count, j_count + 3, 0, 3)) = muij;
+			_mobilityMatrix.block<3,3>(j_count,0) = muij;
+			_mobilityMatrix.block<3,3>(0,j_count) = muij;
+			//noalias(subrange(_mobilityMatrix, j_count, j_count + 3, 0, 3)) = muij;
 		}
 		lubM += lubricate(vec_rij);
 	}
 	
 	// create resistance matrix - Some elements remain constant throughout the simulation. Those are stored here.
-	bool inverted;
 	if (full){ 
-		inverted = CholInvertPart(_mobilityMatrix, _resMNoLub); 
-		if (!inverted){
-			cout << "ERROR: Could not invert mobility matrix!" << endl;
-			exit (EXIT_FAILURE);
-		}
+		 _resMNoLub = CholInvertPart(_mobilityMatrix); 
 	}
 	// Add lubrication Part to tracer Resistance Matrix
-	symmetric_matrix<double> tracerResMat = _resMNoLub + lubM;
+	Matrix3d tracerResMat = _resMNoLub + lubM;
 	
-	symmetric_matrix<double> submobil (3);
-	inverted = CholInvertPart(tracerResMat, submobil);
-	if (!inverted){
-		cout << "ERROR: Could not invert resistance submatrix!" << endl;
-		exit (EXIT_FAILURE);
-	}	
-	noalias(_tracerMM) = submobil;
+	_tracerMM = CholInvertPart(tracerResMat);
 }
 
 
 
 //----------------------- Ewald sum ------------------------
 
-matrix<double> CConfiguration::realSpcSm( const ublas::vector<double> & rij, const bool self, const double asq ){  // This should be distance of particles
+Matrix3d  CConfiguration::realSpcSm( const Vector3d & rij, const bool self, const double asq ){  // This should be distance of particles
     const int nmax = _nmax;
+	int maxIter = 2*nmax;
 	const double r_cutoffsq = _r_cutoffsq;
     // TODO nmax !!!
-	ublas::vector<double> rn_vec(3);
-	matrix<double> Mreal = zero_matrix<double>(3,3);
-	for (int n1 = -nmax; n1 <= nmax; n1++){
+	Vector3d rn_vec(3);
+	Matrix3d  Mreal = Matrix3d::Zero();
+	double v1[maxIter+1] , v2[maxIter+1], v3[maxIter+1];
+	for (int n = 0; n <= maxIter; n++){
+	    v1[n] = (rij(0) + _boxsize * (n-nmax));
+		v2[n] = (rij(1) + _boxsize * (n-nmax));
+		v3[n] = (rij(2) + _boxsize * (n-nmax));
+	}
+	for (int n1 = 0; n1 <= maxIter; n1++){
 		
-		rn_vec(0) = rij(0) + _boxsize * n1;
-		for (int n2 = -nmax; n2 <= nmax; n2++){
+		rn_vec(0) = v1[n1];
+		for (int n2 = 0; n2 <= maxIter; n2++){
 			
-			rn_vec(1) = rij(1) + _boxsize * n2;
-		    for (int n3 = -nmax; n3 <= nmax; n3++){
+			rn_vec(1) = v2[n2];
+		    for (int n3 = 0; n3 <= maxIter; n3++){
 				
 				// CASE n ==(0, 0, 0) and nu == eta 
 				if (n1 == 0 && n2 == 0 && n3 == 0 && self) continue;
 				else{  
-					rn_vec(2) = rij(2) + _boxsize * n3;
-					const double rsq = inner_prod(rn_vec,rn_vec);
+					rn_vec(2) = v3[n3];
+					const double rsq = (rn_vec.transpose()*rn_vec);
 	                if ( rsq <= r_cutoffsq ){ 
-						noalias(Mreal) += realSpcM(rsq, rn_vec, self, asq);
+						Mreal += realSpcM(rsq, rn_vec, self, asq);
 					}
 				}
 			}
@@ -594,21 +580,22 @@ matrix<double> CConfiguration::realSpcSm( const ublas::vector<double> & rij, con
 }
 
 
-matrix<double> CConfiguration::reciprocalSpcSm( const ublas::vector<double> & rij, const double asq ){  // This should be distance of particles
+
+Matrix3d  CConfiguration::reciprocalSpcSm( const Vector3d & rij, const double asq ){  // This should be distance of particles
 	const double k_cutoffsq = pow(_k_cutoff, 2);
 	const int nkmax = _nkmax;
 	const double ntok = 2 * M_PI / _boxsize;
-	ublas::vector<double> kvec(3);
-    matrix<double> Mreciprocal = zero_matrix<double>(3,3);
+	Vector3d kvec(3);
+    Matrix3d  Mreciprocal = Matrix3d::Zero();
     for (int n1 = -nkmax; n1 <= nkmax; n1++){
         for (int n2 = -nkmax; n2 <= nkmax; n2++){
             for (int n3 = -nkmax; n3 <= nkmax; n3++){
 				if (n1 == 0 && n2 == 0 && n3 == 0)  continue;
 				else{ 
 	                kvec(0) = n1 * ntok, kvec(1) = n2 * ntok, kvec(2) = n3 * ntok;
-					const double ksq = inner_prod(kvec,kvec);
+					const double ksq = (kvec.transpose()*kvec);
                     if ( ksq <= k_cutoffsq ){  
-						noalias(Mreciprocal) += reciprocalSpcM(ksq, kvec, asq) * cos(inner_prod(rij, kvec));
+						Mreciprocal += reciprocalSpcM(ksq, kvec, asq) * cos((kvec.transpose()* kvec));
 					}
 				}
             }
@@ -618,9 +605,9 @@ matrix<double> CConfiguration::reciprocalSpcSm( const ublas::vector<double> & ri
         
 }
 
-matrix<double> CConfiguration::realSpcM(const double & rsq, const ublas::vector<double> & rij, const bool self, const double asq) {
+Matrix3d  CConfiguration::realSpcM(const double & rsq, const Vector3d & rij, const bool self, const double asq) {
     // Idea: To only account for tracer in one box, leave out eta = eta_tracer in sums entirely or something...
-	matrix<double> I = identity_matrix<double>(3);   
+	Matrix3d  I = Matrix3d::Identity();   
     const double r = sqrt(rsq);
 	const double alpha = _alpha;
 	const double alphasq = alpha * alpha;
@@ -634,14 +621,14 @@ matrix<double> CConfiguration::realSpcM(const double & rsq, const ublas::vector<
 	
 	return _pradius * ( I * ( erfcc *  ( 0.75 + 0.5 * c5 )
 		+ expc * (3. * c1 - 4.5 + asq * ( c2 - 20. * c3 + 14. * alphasq + c4 )))
-			+ outer_prod(rij,rij) / rsq * (
+			+ (rij*rij.transpose()) / rsq * (
 				erfcc * ( 0.75 - 3. * c5 ) +
 					expc * ( 1.5 - 3. * c1 + asq * (- c2 + 16. * c3 - 2. * alphasq - 3. * c4))));
 }
 
 
-matrix<double> CConfiguration::reciprocalSpcM(const double ksq, const ublas::vector<double> & kij, const double asq) {
-    matrix<double> I = identity_matrix<double>(3);
+Matrix3d  CConfiguration::reciprocalSpcM(const double ksq, const Vector3d & kij, const double asq) {
+    Matrix3d  I = Matrix3d::Identity();  
 	const double alphasq = _alpha * _alpha;
 	const double V = pow( _boxsize, 3);
     const double c1 = ksq / ( 4. * alphasq );
@@ -649,7 +636,7 @@ matrix<double> CConfiguration::reciprocalSpcM(const double ksq, const ublas::vec
 	//return _pradius * ( 1. - 0.333333 * asq * ksq ) * ( 1. + c1 + 2. * c1 * c1 ) * ( 6. * M_PI / (ksq * V)) * exp( -c1 ) * ( I - outer_prod(kij,kij)/ksq);
 		//alternative way from Brady1988 TODO alt
 	return _pradius  * ( 1. + c1 + 2. * c1 * c1 ) 
-		* ( 6. * M_PI / (ksq * V)) * exp( - c1 ) * ( I - outer_prod(kij,kij)/ksq);
+		* ( 6. * M_PI / (ksq * V)) * exp( - c1 ) * ( I - (kij*kij.transpose())/ksq);
 }
 
 
@@ -657,23 +644,27 @@ matrix<double> CConfiguration::reciprocalSpcM(const double ksq, const ublas::vec
 
 //------------------------------------- Lubrication Resistance Matrix ------------------------------
 
-symmetric_matrix<double> CConfiguration::lubricate( const ublas::vector<double> & rij ){  
+Matrix3d  CConfiguration::lubricate( const Vector3d & rij ){  
 	// Addition to lubrication Matrix for nearest edgeparticles
-	symmetric_matrix<double> lubPart = zero_matrix<double> (3);
+	Matrix3d  lubPart = Matrix3d::Zero();
 	const double r_cutoffsq = 9*_polyrad;
     // TODO nmax !!!
-	ublas::vector<double> rn_vec(3);
-	matrix<double> Mreal = zero_matrix<double>(3,3);
-	for (int n1 = -1; n1 <= 1; n1++){
-		rn_vec(0) = rij(0) + _boxsize * n1;
-		for (int n2 = -1; n2 <= 1; n2++){
-			rn_vec(1) = rij(1) + _boxsize * n2; 
-		    for (int n3 = -1; n3 <= 1; n3++){
-				rn_vec(2) = rij(2) + _boxsize * n3;
-				const double rsq = inner_prod(rn_vec,rn_vec);
+	Vector3d rn_vec(3);
+	Matrix3d  Mreal = Matrix3d::Zero();
+//     for (int n1 = -1; n1 <= 1; n1++){
+    auto values_1 = {rij(0) - _boxsize, rij(0), rij(0) + _boxsize};
+    auto values_2 = {rij(1) - _boxsize, rij(1), rij(1) + _boxsize};
+    auto values_3 = {rij(2) - _boxsize, rij(2), rij(2) + _boxsize};
+    for (auto v1 : values_1) {
+		rn_vec(0) = v1;
+		for (auto v2 : values_2) {
+			rn_vec(1) = v2;
+		    for (auto v3 : values_3) {
+				rn_vec(2) = v3;
+				const double rsq = (rn_vec.transpose()*rn_vec);
                 if ( rsq <= r_cutoffsq ){ 
-					if (rsq < r_cutoffsq/2) noalias(lubPart) += lub2p(rn_vec, rsq, 8);
-					else noalias(lubPart) += lub2p(rn_vec, rsq, 5);
+					if (rsq < r_cutoffsq/2) lubPart += lub2p(rn_vec, rsq, 8);
+					else lubPart += lub2p(rn_vec, rsq, 5);
 				}
 			}
 		}
@@ -681,7 +672,7 @@ symmetric_matrix<double> CConfiguration::lubricate( const ublas::vector<double> 
 	return lubPart;
 }
 
-ublas::symmetric_matrix<double> CConfiguration::lub2p( ublas::vector<double> rij, double rsq, unsigned int mmax ){
+Matrix3d CConfiguration::lub2p( Vector3d rij, double rsq, unsigned int mmax ){
 	// This function returns the 3x3 lubrication part of the resistance matrix of the tracer particle
 	double s = 2*sqrt(rsq)/(_pradius + _polyrad);
 	double c1 = pow(2/s, 2);
@@ -693,15 +684,16 @@ ublas::symmetric_matrix<double> CConfiguration::lub2p( ublas::vector<double> rij
 		Sum2 += c2;
 	}
 	Sum2 = Sum2 * _g[0];
-	symmetric_matrix<double, upper> lubR (3,3);
 	double c3 = - ( _g[1] + _g[2] * ( 1 - c1 ) ) * log( 1 - c1 );
 	double c4 = ( _g[0]/(1-c1) - _g[0] +  2*c3  +  2*Sum1  +  Sum2 ) / (rsq);
-	for (int i = 0; i < 3; i++){
-		for (int j = i; j < 3; j++){
-			lubR(i,j) = rij(i) * rij(j) * c4;
-			if (i == j) lubR(i,j) += c3 + Sum1;
-		}
-	}
+	Matrix3d lubR = Matrix3d::Identity() * (c3 + Sum1) + rij * rij.transpose() * c4;
+		
+	// for (int i = 0; i < 3; i++){
+// 		for (int j = i; j < 3; j++){
+// 			lubR(i,j) = rij(i) * rij(j) * c4;
+// 			if (i == j) lubR(i,j) += c3 + Sum1;
+// 		}
+// 	}
 	return lubR * (_pradius + _polyrad)/(2*_pradius);
 }
 
@@ -710,55 +702,16 @@ ublas::symmetric_matrix<double> CConfiguration::lub2p( ublas::vector<double> rij
 
 
 
-template<class T> 
-bool CConfiguration::InvertMatrix (const ublas::matrix<T>& input, ublas::matrix<T>& inverse) { 
-    typedef ublas::permutation_matrix<std::size_t> pmatrix; 
-    // create a working copy of the input 
-    matrix<T> A(input); 
-    // create a permutation matrix for the LU-factorization 
-    pmatrix pm(A.size1()); 
-    // perform LU-factorization 
-    int res = lu_factorize(A,pm); 
-    if( res != 0 )
-        return false; 
-    // create identity matrix of "inverse" 
-    inverse.assign(ublas::identity_matrix<T>(A.size1())); 
-    // backsubstitute to get the inverse 
-    lu_substitute(A, pm, inverse); 
-    return true; 
-}
 
-
-
-template<class MATRIX>
-bool CConfiguration::CholInvertPart (const MATRIX& A, MATRIX& partInv) {
-    using namespace boost::numeric::ublas;
+Matrix3d CConfiguration::CholInvertPart (const MatrixXd A) {
+	MatrixXd I = MatrixXd::Identity(A.rows(),A.rows());
 	
 	// make sure partInv is 3x3 matrix and A is NxN with N larger 2
-	assert( A.size1() > 2);
-	assert( A.size1() == A.size2());
-	assert( partInv.size1() == 3 );
-	assert( partInv.size2() == 3 );
+	assert( A.rows() > 2 );
+	assert( A.rows() == A.cols() );
 
-    triangular_matrix<double, lower> L(A.size1(), A.size1());
-    L.clear();
-    // perform cholesky decomposition
-    size_t res = cholesky_decompose(A, L);
-
-    ublas::vector<double> b (A.size1());
-
-    for (int i = 0; i < 3; i++){
-        std::fill(b.begin(), b.end(), 0.0);  //make b zero vector
-        b(i)=1;                              //make b unit vector in direction i
-//		cout << "solve b4 "<< endl;
-        inplace_solve(L, b, lower_tag() );
-//		cout << "solve ok "<< endl;
-        inplace_solve(trans(L), b, upper_tag() );
-        partInv(i, 0) = b(0);
-        partInv(i, 1) = b(1);
-        partInv(i, 2) = b(2);
-    }
-    return true;
+    // perform inversion by cholesky decompoposition and return upper left 3x3 block
+    return A.llt().solve(I).block<3,3>(0,0);
 }
 
 
@@ -855,23 +808,23 @@ void CConfiguration::resetposition(){
 //----------------------- Rotne Prager ------------------------
 
 
-matrix<double> CConfiguration::RotnePrager(const double & r, const double & rsq,
-										   const ublas::vector<double> & rij) {
-	matrix<double> I = identity_matrix<double>(3);
-
-	double c1 = 0.75 * _polyrad / r; 	//3. * a / (4. * r);
-	double c2 = 2. * _polyrad * _polyrad / rsq;	
-	return c1*( (1.+c2/3)*I + prod( (1.-c2)*I , matrix<double>(outer_prod(rij,rij)) / rsq));
-	                         // = outer_prod(v1,v2) * (1-c2)  works also for the second part of this eq.
+ Matrix3d  CConfiguration::RotnePrager(const double & r, const double & rsq,
+ 										   const Vector3d & rij) {
+// 	Matrix3d  I = Matrix3d::Identity();
+//
+// 	double c1 = 0.75 * _polyrad / r; 	//3. * a / (4. * r);
+// 	double c2 = 2. * _polyrad * _polyrad / rsq;
+// 	return c1*( (1.+c2/3)*I + prod( (1.-c2)*I , matrix<double>((rij*rij.transpose())) / rsq));
+// 	                         // = outer_prod(v1,v2) * (1-c2)  works also for the second part of this eq.
 }
 
-matrix<double> CConfiguration::RotnePragerDiffRad(const double & r, const double & rsq,
-										          const ublas::vector<double> & rij) {
-	matrix<double> I = identity_matrix<double>(3);
-
-	double c1 = 0.75 * _pradius / r; 	//3. * _p/2 / (4. * _r);
-	double c2 = (_polyrad * _polyrad + _pradius * _pradius) / rsq;  
-	return c1*( (1.+c2/3)*I + prod( (1.-c2)*I , matrix<double>(outer_prod(rij,rij)) / rsq));
+Matrix3d CConfiguration::RotnePragerDiffRad(const double & r, const double & rsq,
+										          const Vector3d & rij) {
+	// Matrix3d  I = Matrix3d::Identity();
+	//
+	// double c1 = 0.75 * _pradius / r; 	//3. * _p/2 / (4. * _r);
+	// double c2 = (_polyrad * _polyrad + _pradius * _pradius) / rsq;
+	// return c1*( (1.+c2/3)*I + prod( (1.-c2)*I , matrix<double>((rij*rij.transpose())) / rsq));
 }
 
 

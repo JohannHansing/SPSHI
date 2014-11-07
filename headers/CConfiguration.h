@@ -14,28 +14,19 @@
 #include <boost/random/normal_distribution.hpp>
 #include <boost/math/special_functions/bessel.hpp>
 
-#include <boost/numeric/ublas/vector.hpp>
-#include <boost/numeric/ublas/vector_proxy.hpp>
-#include <boost/numeric/ublas/assignment.hpp>
-#include <boost/numeric/ublas/matrix.hpp>
-#include <boost/numeric/ublas/lu.hpp>
-#include <boost/numeric/ublas/io.hpp>
-#include <boost/numeric/ublas/symmetric.hpp>
-#include <boost/numeric/ublas/matrix_proxy.hpp>
-#include <boost/numeric/ublas/triangular.hpp> 
+#include <Eigen/Dense>
+#include <Eigen/Cholesky>
 
 
 #include "CPolymers.h"
 
-
-
-namespace ublas = boost::numeric::ublas;
 
 class CConfiguration {
     /*Class where all the configuration variables such as potRange etc. and also most functions for the
      * simulation are stored
      */
 private:
+
     //SCALING
     double _timestep;         //This is the RESCALED timestep! timestep = dt * kT / (frictionCoeffcient * particlesize)
     double _mu_sto;
@@ -76,13 +67,13 @@ private:
     double _ppos[3];    //initialize particle position (DO IT LIKE resetpos FOR MOVEPARTICLEFOLLOW/RESET)
     double _upot;
     double _f_mob[3];   //store mobility and stochastic force
-    ublas::vector<double> _f_sto;
+    Eigen::Vector3d _f_sto;
 	
 	//HI Paramters
 	std::vector<std::array<double, 3> > _epos;
-	ublas::symmetric_matrix<double> _mobilityMatrix;
-	ublas::symmetric_matrix<double> _tracerMM;     
-	ublas::symmetric_matrix<double> _resMNoLub;
+	Eigen::MatrixXd _mobilityMatrix;
+	Eigen::Matrix3d _tracerMM;     
+	Eigen::Matrix3d _resMNoLub;
 	bool _HI;
 	double _polyrad;
 	int _edgeParticles;
@@ -113,20 +104,17 @@ private:
     void modifyPot(double& U, double& Fr, double dist);
     void calcLJPot(const double r, double &U, double &dU);
     void initPosHisto();
-	template<class T> 
-	bool InvertMatrix(const ublas::matrix<T>& input, ublas::matrix<T>& inverse);
-	ublas::matrix<double> RotnePragerDiffRad(const double & r, const double & rsq, const ublas::vector<double> & rij);
-	ublas::matrix<double> RotnePrager(const double & r, const double & rsq, const ublas::vector<double> & rij);
+	Eigen::Matrix3d RotnePragerDiffRad(const double & r, const double & rsq, const Eigen::Vector3d & rij);
+	Eigen::Matrix3d RotnePrager(const double & r, const double & rsq, const Eigen::Vector3d & rij);
 	void initConstMobilityMatrix();
-	template<class MATRIX>
-	bool CholInvertPart (const MATRIX& A, MATRIX& partInv) ;
-	ublas::matrix<double> realSpcSm( const ublas::vector<double> & rij, const bool self, const double asq );
-	ublas::matrix<double> reciprocalSpcSm( const ublas::vector<double> & rij, const double asq );
-	ublas::matrix<double> realSpcM(const double & rsq, const ublas::vector<double> & rij, const bool self, const double asq);
-	ublas::matrix<double> reciprocalSpcM(const double ksq, const ublas::vector<double> & kij,  const double asq);
+	Eigen::Matrix3d CholInvertPart (const Eigen::MatrixXd A);
+	Eigen::Matrix3d realSpcSm( const Eigen::Vector3d & rij, const bool self, const double asq );
+	Eigen::Matrix3d reciprocalSpcSm( const Eigen::Vector3d & rij, const double asq );
+	Eigen::Matrix3d realSpcM(const double & rsq, const Eigen::Vector3d & rij, const bool self, const double asq);
+	Eigen::Matrix3d reciprocalSpcM(const double ksq, const Eigen::Vector3d & kij,  const double asq);
 	
-	ublas::symmetric_matrix<double> lub2p( ublas::vector<double> rij, double rsq, unsigned int mmax );
-	ublas::symmetric_matrix<double> lubricate( const ublas::vector<double> & rij );
+	Eigen::Matrix3d lub2p( Eigen::Vector3d rij, double rsq, unsigned int mmax );
+	Eigen::Matrix3d lubricate( const Eigen::Vector3d & rij );
 
 
 
