@@ -167,7 +167,7 @@ int main(int argc, const char* argv[]){
 		    // calc HI mobility matrix here, since it needs to be defined for random force normalisation
 		    if (HI){
 				if ( i%MMcalcStep == 0 ){ conf.calcTracerMobilityMatrix(true); }
-				else { conf.calcTracerMobilityMatrix(false); }
+				else { conf.calcTracerMobilityMatrix(false); cout << i << endl; }
 			}
 			/* //TODO Write new update condition:
 			if ( conf.getDispSq() < pow(CUTOFF,2) ){   // This could be, e.g. CUTOFF = 0.05 * particlesize

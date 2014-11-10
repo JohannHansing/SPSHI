@@ -22,8 +22,9 @@ CConfiguration::CConfiguration(
     _potRange = potRange;
     _potStrength = potStrength;
     _pradius = psize/2;   //_pradius is now the actual radius of the particle. hence, I need to change the definition of the LJ potential to include (_pradius + _polyrad)   -  or maybe leave LJ pot out
-    _boxsize = boxsize;
-    _resetpos = _boxsize/2;
+    _polyrad = polymersize / 2;   //This is needed for testOverlap for steric and HI stuff !!
+	_boxsize = boxsize;
+    _resetpos = 1.001; //_boxsize/2;
     _timestep = timestep;
     _rodDistance = rodDistance;
     _potMod = potMod;
@@ -61,32 +62,30 @@ CConfiguration::CConfiguration(
     setRanNumberGen(0);
     
     //Ewald sum stuff
-    _nmax = 2; // This corresponds to a cutoff of r_cutoff = 1 * _boxsize
+    _nmax = 3; // This corresponds to a cutoff of r_cutoff = 1 * _boxsize
 	_alpha = sqrt(M_PI) / _boxsize; // This value for alpha corresponds to the suggestion in Beenakker1986
 	_k_cutoff = 2. * _alpha * _alpha * _nmax * _boxsize;   /* This corresponds to suggestion by Jain2012 ( equation 15 and 16 ). */
 	_nkmax = (int) (_k_cutoff * _boxsize / (2. * M_PI) + 0.5);   /* The last bit (+0.5) may be needed to ensure that the next higher integer 
 		                                                   * k value is taken for kmax */
 	_r_cutoffsq = pow(_nmax * _boxsize, 2);   // Like Jain2012, r_cutoff is chosen such that exp(-(r_cutoff * alpha)^2) is small
 	
-	
 	// lubrication stuff
-	const double lam = _polyrad/_pradius;
+	const double lam = polymersize/psize;
 	const double c1 = pow(1+lam, -3);
 	_g[0] = 2 * pow(lam, 2) * c1;
 	_g[1] = lam/5 * ( 1 + 7*lam + lam*lam ) * c1;
 	_g[2] = 1/42 * ( 1 + lam*(18 - lam*(29 + lam*(18 + lam)))) * c1;
 	
+	
 	// init HI vectors matrices, etc
-	_polyrad = polymersize / 2;   //This is needed for testOverlap for steric
     if (polymersize != 0) _HI = true;
 	if (_HI) {
 		_edgeParticles = (int) (_boxsize/polymersize);
 		_epos.resize(3 * _edgeParticles - 2);
 		initConstMobilityMatrix();
+		calcTracerMobilityMatrix(true);
 		_LJPot = false;
 	}
-	
-	
 }
 
 void CConfiguration::updateStartpos(){
@@ -434,8 +433,8 @@ void CConfiguration::initConstMobilityMatrix(){
 	
 	// create mobility matrix - Some elements remain constant throughout the simulation. Those are stored here.
 	int size = 3 * (3 * _edgeParticles - 1);
-	_mobilityMatrix = MatrixXd::Zero(size,size);
-	
+	_mobilityMatrix = MatrixXd::Identity(size,size);
+		
 	// set _edgeParticles positions _pos to zero
 	for (int i = 0; i < 3 * _edgeParticles - 2; i++){
 	    _epos[i].fill(0);
@@ -498,7 +497,7 @@ void CConfiguration::initConstMobilityMatrix(){
 			_mobilityMatrix.block<3,3>(j_count,i_count) = selfmob;
 			_mobilityMatrix.block<3,3>(i_count,j_count) = selfmob;
 		}
-	}		
+	}	
 }
 
 
@@ -528,7 +527,7 @@ void CConfiguration::calcTracerMobilityMatrix(bool full){
 		}
 		lubM += lubricate(vec_rij);
 	}
-	
+		
 	// create resistance matrix - Some elements remain constant throughout the simulation. Those are stored here.
 	if (full){ 
 		 _resMNoLub = CholInvertPart(_mobilityMatrix); 
@@ -537,6 +536,10 @@ void CConfiguration::calcTracerMobilityMatrix(bool full){
 	Matrix3d tracerResMat = _resMNoLub + lubM;
 	
 	_tracerMM = CholInvertPart(tracerResMat);
+	if (true){
+	    cout << "############### _tracerMM ##############" << endl;
+	    cout << _tracerMM << endl;
+    }
 }
 
 
@@ -565,12 +568,13 @@ Matrix3d  CConfiguration::realSpcSm( const Vector3d & rij, const bool self, cons
 		    for (int n3 = 0; n3 <= maxIter; n3++){
 				
 				// CASE n ==(0, 0, 0) and nu == eta 
-				if (n1 == 0 && n2 == 0 && n3 == 0 && self) continue;
+				if ((n3-nmax) == 0 && (n3-nmax) == 0 && (n3-nmax) == 0 && self) continue;
 				else{  
 					rn_vec(2) = v3[n3];
-					const double rsq = (rn_vec.transpose()*rn_vec);
+					const double rsq = (rn_vec.transpose() * rn_vec);
 	                if ( rsq <= r_cutoffsq ){ 
 						Mreal += realSpcM(rsq, rn_vec, self, asq);
+						
 					}
 				}
 			}
@@ -601,6 +605,7 @@ Matrix3d  CConfiguration::reciprocalSpcSm( const Vector3d & rij, const double as
             }
         }
     }
+
     return Mreciprocal;   // V is taken care of in reciprocalSpcM 
         
 }
@@ -647,24 +652,24 @@ Matrix3d  CConfiguration::reciprocalSpcM(const double ksq, const Vector3d & kij,
 Matrix3d  CConfiguration::lubricate( const Vector3d & rij ){  
 	// Addition to lubrication Matrix for nearest edgeparticles
 	Matrix3d  lubPart = Matrix3d::Zero();
-	const double r_cutoffsq = 9*_polyrad;
+	const double r_cutoffsq = pow(10*_polyrad,2);
     // TODO nmax !!!
 	Vector3d rn_vec(3);
 	Matrix3d  Mreal = Matrix3d::Zero();
 //     for (int n1 = -1; n1 <= 1; n1++){
-    auto values_1 = {rij(0) - _boxsize, rij(0), rij(0) + _boxsize};
-    auto values_2 = {rij(1) - _boxsize, rij(1), rij(1) + _boxsize};
-    auto values_3 = {rij(2) - _boxsize, rij(2), rij(2) + _boxsize};
-    for (auto v1 : values_1) {
-		rn_vec(0) = v1;
-		for (auto v2 : values_2) {
-			rn_vec(1) = v2;
-		    for (auto v3 : values_3) {
-				rn_vec(2) = v3;
-				const double rsq = (rn_vec.transpose()*rn_vec);
+    double values_1[3] = {rij(0) - _boxsize, rij(0), rij(0) + _boxsize};
+    double values_2[3] = {rij(1) - _boxsize, rij(1), rij(1) + _boxsize};
+    double values_3[3] = {rij(2) - _boxsize, rij(2), rij(2) + _boxsize};
+    for (int n1 = 0; n1 < 3; n1++) {
+		rn_vec(0) = values_1[n1];
+		for (int n2 = 0; n2 < 3; n2++) {
+			rn_vec(1) = values_2[n2];
+		    for (int n3 = 0; n3 < 3; n3++) {
+				rn_vec(2) = values_3[n3];
+				const double rsq = (rn_vec.transpose() * rn_vec);
                 if ( rsq <= r_cutoffsq ){ 
-					if (rsq < r_cutoffsq/2) lubPart += lub2p(rn_vec, rsq, 8);
-					else lubPart += lub2p(rn_vec, rsq, 5);
+					if (rsq < r_cutoffsq/2) lubPart += lub2p(rn_vec, rsq, 10);
+					else lubPart += lub2p(rn_vec, rsq, 7);
 				}
 			}
 		}
@@ -675,15 +680,19 @@ Matrix3d  CConfiguration::lubricate( const Vector3d & rij ){
 Matrix3d CConfiguration::lub2p( Vector3d rij, double rsq, unsigned int mmax ){
 	// This function returns the 3x3 lubrication part of the resistance matrix of the tracer particle
 	double s = 2*sqrt(rsq)/(_pradius + _polyrad);
+	// cout << "\ns " << s << endl;
 	double c1 = pow(2/s, 2);
+	// cout << "c1 " << c1 << endl;
 	double Sum1 = - c1 * ( _g[2] + _g[1] );
 	double Sum2 = c1;
+	// cout << "Sum1: " << Sum1 << " $$$$ Sum2: " << Sum2 << endl;
 	for (int m = 2; m < mmax; m++){
 		double c2 = pow(c1, m);
-		Sum1 += c2/m * ( 2*_g[2]/(m-1) - _g[1]);
+		Sum1 += c2/m * ( _g[2]/(m-1) - _g[1]);
 		Sum2 += c2;
 	}
 	Sum2 = Sum2 * _g[0];
+	// cout << "Sum1: " << Sum1 << " $$$$ Sum2: " << Sum2 << endl;
 	double c3 = - ( _g[1] + _g[2] * ( 1 - c1 ) ) * log( 1 - c1 );
 	double c4 = ( _g[0]/(1-c1) - _g[0] +  2*c3  +  2*Sum1  +  Sum2 ) / (rsq);
 	Matrix3d lubR = Matrix3d::Identity() * (c3 + Sum1) + rij * rij.transpose() * c4;
@@ -694,6 +703,8 @@ Matrix3d CConfiguration::lub2p( Vector3d rij, double rsq, unsigned int mmax ){
 // 			if (i == j) lubR(i,j) += c3 + Sum1;
 // 		}
 // 	}
+	//cout << "\n------- lubR -----" << endl;
+	//cout << lubR << endl;
 	return lubR * (_pradius + _polyrad)/(2*_pradius);
 }
 
