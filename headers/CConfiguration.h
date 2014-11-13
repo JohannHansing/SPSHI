@@ -128,6 +128,7 @@ public:
     void updateStartpos();
     void resetposition();
     void makeStep();
+    void echoPpos();
     void checkBoxCrossing();
     void calcStochasticForces();
     void calcMobilityForces();

@@ -24,7 +24,7 @@ CConfiguration::CConfiguration(
     _pradius = psize/2;   //_pradius is now the actual radius of the particle. hence, I need to change the definition of the LJ potential to include (_pradius + _polyrad)   -  or maybe leave LJ pot out
     _polyrad = polymersize / 2;   //This is needed for testOverlap for steric and HI stuff !!
 	_boxsize = boxsize;
-    _resetpos = 1.001; //_boxsize/2;
+    _resetpos = _boxsize/2;
     _timestep = timestep;
     _rodDistance = rodDistance;
     _potMod = potMod;
@@ -96,17 +96,19 @@ void CConfiguration::updateStartpos(){
     }
 }
 
-
+void CConfiguration::echoPpos(){
+    cout << "ppos :" << _ppos[0] << " " << _ppos[1] << " " << _ppos[2] << endl;
+}
 
 void CConfiguration::makeStep(){
     //move the particle according to the forces and record trajectory like watched by outsider
 //	if (_HI){
 	
-		Vector3d F;
-	    for (int i = 0; i < 3; i++){
-			F(i) = _f_mob[i];
-	        _prevpos[i] = _ppos[i];
-	    }
+    Vector3d F;
+    for (int i = 0; i < 3; i++){
+        F(i) = _f_mob[i];
+        _prevpos[i] = _ppos[i];
+    }
 		Vector3d MMdotF = _tracerMM*F;
 		
 		
@@ -389,7 +391,7 @@ bool CConfiguration::testOverlap(){
     //mostly borrowed from moveParticleAndWatch()
     bool overlaps = false;
     double r_i = 0, r_k = 0;
-    double r_abs = 0;
+    double r_sq = 0;
     double L1[] = {0, _boxsize, 0, _boxsize};  //these two arrays are only needed for the iteration.
     double L2[] = {0, 0, _boxsize, _boxsize};
 
@@ -403,15 +405,15 @@ bool CConfiguration::testOverlap(){
                     r_i -= _rodDistance;
                     if (i == 0) r_k -= _rodDistance;
                 }
-                r_abs = sqrt(r_i * r_i + r_k * r_k); //distance to the rods
-                if (r_abs <= (_pradius + _polyrad)){
-					overlaps = true;
-				    continue;
-				}
+                r_sq = r_i * r_i + r_k * r_k; //distance to the rods
+                if (r_sq <= pow(_pradius + _polyrad, 2)){
+                    overlaps = true;
+                    continue;
+                }
             }
-			if (overlaps == true) continue;
+            if (overlaps == true) continue;
         }
-		if (overlaps == true) continue;
+        if (overlaps == true) continue;
     }
     return overlaps;
 }
@@ -527,6 +529,8 @@ void CConfiguration::calcTracerMobilityMatrix(bool full){
 		}
 		lubM += lubricate(vec_rij);
 	}
+	//cout << "############# _mobilityMatrix #########\n" << _mobilityMatrix << endl;
+        //cout << "############# lubM #########\n" << lubM << endl;
 		
 	// create resistance matrix - Some elements remain constant throughout the simulation. Those are stored here.
 	if (full){ 
@@ -536,10 +540,7 @@ void CConfiguration::calcTracerMobilityMatrix(bool full){
 	Matrix3d tracerResMat = _resMNoLub + lubM;
 	
 	_tracerMM = CholInvertPart(tracerResMat);
-	if (true){
-	    cout << "############### _tracerMM ##############" << endl;
-	    cout << _tracerMM << endl;
-    }
+        //cout << "############# _tracerMM #########\n" << _tracerMM << endl;
 }
 
 
@@ -696,13 +697,7 @@ Matrix3d CConfiguration::lub2p( Vector3d rij, double rsq, unsigned int mmax ){
 	double c3 = - ( _g[1] + _g[2] * ( 1 - c1 ) ) * log( 1 - c1 );
 	double c4 = ( _g[0]/(1-c1) - _g[0] +  2*c3  +  2*Sum1  +  Sum2 ) / (rsq);
 	Matrix3d lubR = Matrix3d::Identity() * (c3 + Sum1) + rij * rij.transpose() * c4;
-		
-	// for (int i = 0; i < 3; i++){
-// 		for (int j = i; j < 3; j++){
-// 			lubR(i,j) = rij(i) * rij(j) * c4;
-// 			if (i == j) lubR(i,j) += c3 + Sum1;
-// 		}
-// 	}
+
 	//cout << "\n------- lubR -----" << endl;
 	//cout << lubR << endl;
 	return lubR * (_pradius + _polyrad)/(2*_pradius);
@@ -799,7 +794,7 @@ double CConfiguration::getDisplacement(){
 
 void CConfiguration::resetposition(){
     //Reset the position to random (allowed) position in cell.
-    boost::random::mt19937 rng;    
+    boost::mt19937 rng;    
 	boost::uniform_01<boost::mt19937&> zeroone(*m_igen);
 	bool overlap = true;
 	while (overlap == true){

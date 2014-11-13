@@ -114,12 +114,12 @@ int main(int argc, const char* argv[]){
     
     steps = simtime/timestep;
     saveInt = steps/instantvalues;
-	const int trajout = (int)(1/timestep);
-	const int MMcalcStep = (int)(0.05/timestep);
+    const int trajout = (int)(10/timestep);
+    const int MMcalcStep = (int)(0.05/timestep);
         
     //Create data folders and print location as string to string "folder"
     string folder = createDataFolder(resetPos, timestep, simtime, urange, ustrength, boxsize, particlesize, rodDist, potentialMod, 
-	                                 includeSteric, ranPot, hpi, hpi_u, hpi_k, polymersize);
+                                     includeSteric, ranPot, hpi, hpi_u, hpi_k, polymersize);
 
 
     //initialize averages
@@ -145,10 +145,10 @@ int main(int argc, const char* argv[]){
 
 
     //cout << "Starting Run Number: " << simcounter << " out of " << totalsims << endl;
-	start = clock();
+    start = clock();
     cout << "Starting Simulation!" << endl;
     
-	unsigned int stepcount = 0;
+    unsigned int stepcount = 0;
     ofstream trajectoryfile;
     trajectoryfile.open((folder + "/Coordinates/trajectory.txt").c_str());
     
@@ -164,23 +164,26 @@ int main(int argc, const char* argv[]){
         if (l%100==0) cout << "run " << l << endl;
 
         for (int i = 0; i < steps; i++){  //calculate stochastic force first, then mobility force!!						
-		    // calc HI mobility matrix here, since it needs to be defined for random force normalisation
-		    if (HI){
-				if ( i%MMcalcStep == 0 ){ conf.calcTracerMobilityMatrix(true); }
-				else { conf.calcTracerMobilityMatrix(false); cout << i << endl; }
-			}
-			/* //TODO Write new update condition:
-			if ( conf.getDispSq() < pow(CUTOFF,2) ){   // This could be, e.g. CUTOFF = 0.05 * particlesize
-			    conf.calcTracerMobilityMatrix(true);
-			    conf.newDispStart();  // Function to reset startpoint for getDispSq()
-			double CConfiguration::getDispSq(){
-			    double dispsq = 0;
-			    for (int i=0; i<3; i++){
-			        dispsq += pow(_ppos[i] - _disp0[i] , 2);
-				}
-			    return dispsq;
-			}
-			*/
+            // calc HI mobility matrix here, since it needs to be defined for random force normalisation
+            if (HI){
+                if ( i%MMcalcStep == 0 ){ conf.calcTracerMobilityMatrix(true); }
+                else { conf.calcTracerMobilityMatrix(false); }
+            }
+            /* //TODO Write new update condition:
+            if ( conf.getDispSq() < cutoffsq ){   // This could be, e.g. CUTOFFSQ = pow(0.05 * particlesize,2)
+                conf.calcTracerMobilityMatrix(true);
+                conf.newDispStart();  // Function to reset startpoint for getDispSq()
+                double CConfiguration::getDispSq(){
+                double dispsq = 0;
+                for (int i=0; i<3; i++){
+                dispsq += pow(_ppos[i] - _disp0[i] , 2);
+                }
+                return dispsq;
+            }
+
+            ***** MAYBE BETTER *****
+            if (HI) conf.checkDisplacement();
+            */
 
             conf.calcStochasticForces();
 
@@ -230,18 +233,23 @@ int main(int argc, const char* argv[]){
 
                 //TODO steric
             while (includeSteric && conf.testOverlap()){
+                cout << "overlap" << endl;
+                //conf.echoPpos();
                 conf.moveBack();
+                //conf.echoPpos();
                 conf.calcStochasticForces();
+                //conf.echoPpos();
                 conf.makeStep();
+                //conf.echoPpos();
             }
             conf.checkBoxCrossing(); //check if particle has crossed the confinement of the box
             
 
 
             if (stepcount%trajout == 0) {
-				std::vector<double> ppos = conf.getppos();
-				trajectoryfile << stepcount * timestep << "\t" << ppos[0] << " " << ppos[1] << " " << ppos[2] << endl;
-			}
+                std::vector<double> ppos = conf.getppos();
+                trajectoryfile << fixed << stepcount * timestep << "\t" << ppos[0] << " " << ppos[1] << " " << ppos[2] << endl;
+            }
             if (((i % 5) == 0) && recordPosHisto) conf.addHistoValue();
         }
     }//----------END OF RUNS-LOOP
@@ -306,11 +314,11 @@ string createDataFolder(bool resetpos, double timestep, double simtime, double p
     if (randomPot) folder = folder + "/ranPot";
     if (steric) folder = folder + "/steric";    //TODO steric2
     if (potMod) folder = folder +  "/potMod";   //"/potMod";  TODO!!! Bessel
-	if (hpi) folder = folder + "/HPI/hpiu" + toString(hpi_u) + "/hpik" + toString(hpi_k);
+    if (hpi) folder = folder + "/HPI/hpiu" + toString(hpi_u) + "/hpik" + toString(hpi_k);
     folder = folder
             + "/dt" + toString(timestep)
             + "/t" + toString(simtime)
-			+ "/a" + toString(polymersize)
+            + "/a" + toString(polymersize)
             + "/d" + toString(rDist)
             + "/b" + toString(boxsize)
             + "/p" + toString(particlesize)
@@ -338,19 +346,19 @@ void settingsFile(string folder, bool resetpos, double particlesize, double boxs
     settingsfile << "potMod " << potMod << endl;//" (Bessel)" << endl;  //TODO Bessel!
     settingsfile << "recordMFP " << recordMFP << endl;
     settingsfile << "includesteric " << steric << endl;
-	settingsfile << "ranPot " << randomPot  << endl;
-	settingsfile << "HPI " << hpi  << endl;
-	if (hpi == true){
-		settingsfile << "hpi_u " << randomPot  << endl;
-		settingsfile << "hpi_k " << randomPot  << endl;
+    settingsfile << "ranPot " << randomPot  << endl;
+    settingsfile << "HPI " << hpi  << endl;
+    if (hpi == true){
+        settingsfile << "hpi_u " << randomPot  << endl;
+        settingsfile << "hpi_k " << randomPot  << endl;
     }
     settingsfile << "d " << rDist << endl;
     settingsfile << "p " << particlesize << endl;
-	settingsfile << "b " << boxsize << endl;
+    settingsfile << "b " << boxsize << endl;
     settingsfile << "dt " << timestep  << endl << "runs " << runs << endl << "steps " << steps << endl << "time: " << timestep*steps << endl;
     settingsfile << "k " << potRange << endl << "U_0 " << potStrength << endl;
-	settingsfile << "a" << polymersize << endl;
-	    
+    settingsfile << "a" << polymersize << endl;
+
     settingsfile.close();
 }
 
