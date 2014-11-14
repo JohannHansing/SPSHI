@@ -108,7 +108,6 @@ void CConfiguration::checkDisplacementforMM(){
         _lastcheck[0] = _ppos[0] + _boxsize *  _boxnumberXYZ[0];
         _lastcheck[1] = _ppos[1] + _boxsize *  _boxnumberXYZ[1];
         _lastcheck[2] = _ppos[2] + _boxsize *  _boxnumberXYZ[2];
-        cout << "full" << endl;
     }
 	else calcTracerMobilityMatrix(false);
 }
