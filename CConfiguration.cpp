@@ -78,6 +78,7 @@ CConfiguration::CConfiguration(
 	
 	
 	// init HI vectors matrices, etc
+    _cutoffMMsq = pow(0.1*_pradius,2);
     if (polymersize != 0) _HI = true;
 	if (_HI) {
 		_edgeParticles = (int) (_boxsize/polymersize);
@@ -96,9 +97,22 @@ void CConfiguration::updateStartpos(){
     }
 }
 
-void CConfiguration::echoPpos(){
-    cout << "ppos :" << _ppos[0] << " " << _ppos[1] << " " << _ppos[2] << endl;
+void CConfiguration::checkDisplacementforMM(){
+    double movedsq = 0;
+    for (int i=0; i<3; i++){
+        movedsq += pow(_ppos[i] + _boxsize *  _boxnumberXYZ[i] - _lastcheck[i] , 2);
+    }
+    if ( movedsq > _cutoffMMsq ){  
+        calcTracerMobilityMatrix(true);
+		// new start point for displacement check
+        _lastcheck[0] = _ppos[0] + _boxsize *  _boxnumberXYZ[0];
+        _lastcheck[1] = _ppos[1] + _boxsize *  _boxnumberXYZ[1];
+        _lastcheck[2] = _ppos[2] + _boxsize *  _boxnumberXYZ[2];
+        cout << "full" << endl;
+    }
+	else calcTracerMobilityMatrix(false);
 }
+
 
 void CConfiguration::makeStep(){
     //move the particle according to the forces and record trajectory like watched by outsider

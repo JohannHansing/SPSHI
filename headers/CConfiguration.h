@@ -77,6 +77,8 @@ private:
 	bool _HI;
 	double _polyrad;
 	int _edgeParticles;
+    double _lastcheck[3];
+    double _cutoffMMsq;
 	
 	
 	// Ewald sum parameters
@@ -115,6 +117,7 @@ private:
 	
 	Eigen::Matrix3d lub2p( Eigen::Vector3d rij, double rsq, unsigned int mmax );
 	Eigen::Matrix3d lubricate( const Eigen::Vector3d & rij );
+    void calcTracerMobilityMatrix(bool full);
 
 
 
@@ -128,7 +131,6 @@ public:
     void updateStartpos();
     void resetposition();
     void makeStep();
-    void echoPpos();
     void checkBoxCrossing();
     void calcStochasticForces();
     void calcMobilityForces();
@@ -146,7 +148,7 @@ public:
     void moveBack();
     void addHistoValue();
     void printHistoMatrix(string folder);
-	void calcTracerMobilityMatrix(bool full);
+    void checkDisplacementforMM();
 
 
 

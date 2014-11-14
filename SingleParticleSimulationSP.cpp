@@ -165,25 +165,13 @@ int main(int argc, const char* argv[]){
 
         for (int i = 0; i < steps; i++){  //calculate stochastic force first, then mobility force!!						
             // calc HI mobility matrix here, since it needs to be defined for random force normalisation
-            if (HI){
-                if ( i%MMcalcStep == 0 ){ conf.calcTracerMobilityMatrix(true); }
-                else { conf.calcTracerMobilityMatrix(false); }
+            
+            if (HI){ // Calculate displacement and update mobilityMatrix if it is larger than 0.1*tracer Radius
+                conf.checkDisplacementforMM();
             }
-            /* //TODO Write new update condition:
-            if ( conf.getDispSq() < cutoffsq ){   // This could be, e.g. CUTOFFSQ = pow(0.05 * particlesize,2)
-                conf.calcTracerMobilityMatrix(true);
-                conf.newDispStart();  // Function to reset startpoint for getDispSq()
-                double CConfiguration::getDispSq(){
-                double dispsq = 0;
-                for (int i=0; i<3; i++){
-                dispsq += pow(_ppos[i] - _disp0[i] , 2);
-                }
-                return dispsq;
-            }
-
-            ***** MAYBE BETTER *****
-            if (HI) conf.checkDisplacement();
-            */
+            //    if ( i%MMcalcStep == 0 ){ conf.calcTracerMobilityMatrix(true); }
+            //    else { conf.calcTracerMobilityMatrix(false); }
+            //}
 
             conf.calcStochasticForces();
 
@@ -230,21 +218,17 @@ int main(int argc, const char* argv[]){
             //if (includeSteric && conf.testOverlap()) conf.moveBack();   //TODO steric2
             //else conf.checkBoxCrossing();
             
-
+            
                 //TODO steric
             while (includeSteric && conf.testOverlap()){
-                cout << "overlap" << endl;
-                //conf.echoPpos();
                 conf.moveBack();
-                //conf.echoPpos();
                 conf.calcStochasticForces();
-                //conf.echoPpos();
                 conf.makeStep();
-                //conf.echoPpos();
             }
             conf.checkBoxCrossing(); //check if particle has crossed the confinement of the box
+            // end steric
             
-
+            
 
             if (stepcount%trajout == 0) {
                 std::vector<double> ppos = conf.getppos();
