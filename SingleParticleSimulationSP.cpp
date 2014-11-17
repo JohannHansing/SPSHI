@@ -93,7 +93,7 @@ int main(int argc, const char* argv[]){
 
 	//HI
 	if (polymersize != 0){
-		if (fmod(10, polymersize) != 0) {
+		if (fmod(10, polymersize) != 0 && (1 == fmod(10, polymersize)/polymersize)) {  // The second comparison is needed cause fmod()  sometimes does not work properly and gives fmod(a,b) = b, which of course is sensless
 			cerr << "Error; bad polymersize! (Nonzero modulus when dividing 10)" << endl;
 			exit(1);
 		}
@@ -161,7 +161,7 @@ int main(int argc, const char* argv[]){
         instValIndex = 0;
         int fpCounter[3] = {0};                  //counter for first passage times (next point to pass first: fpCounter*fpInt
 
-        if (l%100==0) cout << "run " << l << endl;
+        //if (l%100==0) cout << "run " << l << endl;
 
         for (int i = 0; i < steps; i++){  //calculate stochastic force first, then mobility force!!						
             // calc HI mobility matrix here, since it needs to be defined for random force normalisation
@@ -215,10 +215,10 @@ int main(int argc, const char* argv[]){
             conf.makeStep();    //move particle at the end of iteration
 
             
-            //if (includeSteric && conf.testOverlap()) conf.moveBack();   //TODO steric2
-            //else conf.checkBoxCrossing();
+            if (includeSteric && conf.testOverlap()) conf.moveBack();   //TODO steric2
+            else conf.checkBoxCrossing();
             
-            
+            /*
                 //TODO steric
             while (includeSteric && conf.testOverlap()){
                 conf.moveBack();
@@ -227,7 +227,7 @@ int main(int argc, const char* argv[]){
             }
             conf.checkBoxCrossing(); //check if particle has crossed the confinement of the box
             // end steric
-            
+            */
             
 
             if (stepcount%trajout == 0) {
@@ -296,7 +296,7 @@ string createDataFolder(bool resetpos, double timestep, double simtime, double p
     string folder = "sim_data";
     if (!resetpos) folder = folder + "/noreset";
     if (randomPot) folder = folder + "/ranPot";
-    if (steric) folder = folder + "/steric";    //TODO steric2
+    if (steric) folder = folder + "/steric2";    //TODO steric2
     if (potMod) folder = folder +  "/potMod";   //"/potMod";  TODO!!! Bessel
     if (hpi) folder = folder + "/HPI/hpiu" + toString(hpi_u) + "/hpik" + toString(hpi_k);
     folder = folder
