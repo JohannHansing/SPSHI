@@ -81,7 +81,7 @@ CConfiguration::CConfiguration(
     _cutoffMMsq = pow(0.1*_pradius,2);
     if (polymersize != 0) _HI = true;
 	if (_HI) {
-		_edgeParticles = (int) (_boxsize/polymersize);
+		_edgeParticles = (int) (_boxsize/polymersize + 0.001);
 		_epos.resize(3 * _edgeParticles - 2);
 		initConstMobilityMatrix();
 		calcTracerMobilityMatrix(true);
