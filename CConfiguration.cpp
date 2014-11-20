@@ -75,6 +75,7 @@ CConfiguration::CConfiguration(
 	_g[0] = 2 * pow(lam, 2) * c1;
 	_g[1] = lam/5 * ( 1 + 7*lam + lam*lam ) * c1;
 	_g[2] = 1/42 * ( 1 + lam*(18 - lam*(29 + lam*(18 + lam)))) * c1;
+    _cutofflubSq = pow(12,2)*(pow(_polyrad,2) + pow(_pradius,2));
 	
 	
 	// init HI vectors matrices, etc
@@ -462,18 +463,20 @@ void CConfiguration::initConstMobilityMatrix(){
 		_epos[i + (_edgeParticles - 1)][1] = tmp;  
 		_epos[i + 2 * (_edgeParticles - 1)][2] = tmp;
 	}
-	
-	// on-diagonal elements are self mobilities. Thus = 1 for tracer and lambda = p/a for edgeparticles
-	//_mobilityMatrix(0,0) = 1;  //already taken care of due to identity matrix?
-	//_mobilityMatrix(1,1) = 1;
-	//_mobilityMatrix(2,2) = 1;
-	
-    // ublas-vector for interparticle distance. Needs to initialized as zero vector for self mobilities.
+    
+    // Eigen-vector for interparticle distance. Needs to initialized as zero vector for self mobilities.
 	Vector3d vec_rij = Vector3d::Zero();
 	
-	Matrix3d selfmob = realSpcSm( vec_rij, true, asq ) + reciprocalSpcSm( vec_rij, asq );
-	double self_plus = _pradius/_polyrad + _pradius / sqrt (M_PI) * ( - 6. * _alpha );  //TODO  alt
-	//double self_plus = _pradius/_polyrad + _pradius / sqrt (M_PI) * ( - 6. * _alpha + 40. * pow(_alpha,3) * _polyrad * _polyrad / 3. );
+	// on-diagonal elements of mobility matrix: Tracer first
+    Matrix3d selfmob = realSpcSm( vec_rij, true, _pradius * _pradius ) + reciprocalSpcSm( vec_rij, _pradius * _pradius );
+    double self_plus = 1 + _pradius / sqrt (M_PI) * ( - 6. * _alpha + 40. * pow(_alpha,3) * _pradius * _pradius / 3. );
+
+	_mobilityMatrix.block<3,3>(0,0) = selfmob + Matrix3d::Identity() * self_plus;
+	
+	// now on diagonals for edgeparticles
+	selfmob = realSpcSm( vec_rij, true, asq ) + reciprocalSpcSm( vec_rij, asq );
+    // double self_plus = _pradius/_polyrad + _pradius / sqrt (M_PI) * ( - 6. * _alpha );  //TODO  alt
+	self_plus = _pradius/_polyrad + _pradius / sqrt (M_PI) * ( - 6. * _alpha + 40. * pow(_alpha,3) * _polyrad * _polyrad / 3. );
 	selfmob(0,0) += self_plus;
 	selfmob(1,1) += self_plus;
 	selfmob(2,2) += self_plus;
@@ -483,7 +486,7 @@ void CConfiguration::initConstMobilityMatrix(){
 		/*_mobilityMatrix(0,0) = 1;  already taken care of due to identity matrix. The extra F_i0 part in the Ewald sum is only correction to reciprocal sum.
 		 * I leave out the reciprocal summation for the tracer particle self diff, because it is in only in the simulation box unit cell. */
 				
-		_mobilityMatrix.block<3,3>(i_count,i_count) = selfmob;		
+		_mobilityMatrix.block<3,3>(i_count,i_count) = selfmob;
 	}
 	
 	// The mobility matrix elements for the interacting edgeParticles are stored here, since they do not change position
@@ -652,10 +655,10 @@ Matrix3d  CConfiguration::reciprocalSpcM(const double ksq, const Vector3d & kij,
 	const double V = pow( _boxsize, 3);
     const double c1 = ksq / ( 4. * alphasq );
 	
-	//return _pradius * ( 1. - 0.333333 * asq * ksq ) * ( 1. + c1 + 2. * c1 * c1 ) * ( 6. * M_PI / (ksq * V)) * exp( -c1 ) * ( I - outer_prod(kij,kij)/ksq);
+	return _pradius * ( 1. - 0.333333 * asq * ksq ) * ( 1. + c1 + 2. * c1 * c1 ) * ( 6. * M_PI / (ksq * V)) * exp( -c1 ) 
+        * ( I - (kij*kij.transpose())/ksq);
 		//alternative way from Brady1988 TODO alt
-	return _pradius  * ( 1. + c1 + 2. * c1 * c1 ) 
-		* ( 6. * M_PI / (ksq * V)) * exp( - c1 ) * ( I - (kij*kij.transpose())/ksq);
+    // return _pradius  * ( 1. + c1 + 2. * c1 * c1 ) * ( 6. * M_PI / (ksq * V)) * exp( - c1 ) * ( I - (kij*kij.transpose())/ksq);
 }
 
 
@@ -663,10 +666,9 @@ Matrix3d  CConfiguration::reciprocalSpcM(const double ksq, const Vector3d & kij,
 
 //------------------------------------- Lubrication Resistance Matrix ------------------------------
 
-Matrix3d  CConfiguration::lubricate( const Vector3d & rij ){  
+Matrix3d  CConfiguration::lubricate( const Vector3d & rij ){
 	// Addition to lubrication Matrix for nearest edgeparticles
 	Matrix3d  lubPart = Matrix3d::Zero();
-	const double r_cutoffsq = pow(10*_polyrad,2);
     // TODO nmax !!!
 	Vector3d rn_vec(3);
 	Matrix3d  Mreal = Matrix3d::Zero();
@@ -681,8 +683,8 @@ Matrix3d  CConfiguration::lubricate( const Vector3d & rij ){
 		    for (int n3 = 0; n3 < 3; n3++) {
 				rn_vec(2) = values_3[n3];
 				const double rsq = (rn_vec.transpose() * rn_vec);
-                if ( rsq <= r_cutoffsq ){ 
-					if (rsq < r_cutoffsq/2) lubPart += lub2p(rn_vec, rsq, 10);
+                if ( rsq <= _cutofflubSq ){ 
+					if (rsq < _cutofflubSq/2) lubPart += lub2p(rn_vec, rsq, 10);
 					else lubPart += lub2p(rn_vec, rsq, 7);
 				}
 			}

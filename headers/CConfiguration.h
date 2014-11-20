@@ -79,6 +79,7 @@ private:
 	int _edgeParticles;
     double _lastcheck[3];
     double _cutoffMMsq;
+    
 	
 	
 	// Ewald sum parameters
@@ -91,6 +92,7 @@ private:
 	//Lubrication parameters
 	int _mmax;
 	double _g[3];
+    double _cutofflubSq;
 
 
     boost::mt19937 *m_igen;                      //generate instance of random number generator "twister".
