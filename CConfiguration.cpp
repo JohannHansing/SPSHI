@@ -472,6 +472,8 @@ void CConfiguration::initConstMobilityMatrix(){
     double self_plus = 1 + _pradius / sqrt (M_PI) * ( - 6. * _alpha + 40. * pow(_alpha,3) * _pradius * _pradius / 3. );
 
 	_mobilityMatrix.block<3,3>(0,0) = selfmob + Matrix3d::Identity() * self_plus;
+    cout << "tracer eigen ewaldsum:\n" << selfmob << endl;
+    cout << "tracer eigen selfplus:\n" << self_plus << endl;
 	
 	// now on diagonals for edgeparticles
 	selfmob = realSpcSm( vec_rij, true, asq ) + reciprocalSpcSm( vec_rij, asq );
@@ -585,12 +587,12 @@ Matrix3d  CConfiguration::realSpcSm( const Vector3d & rij, const bool self, cons
 		    for (int n3 = 0; n3 <= maxIter; n3++){
 				
 				// CASE n ==(0, 0, 0) and nu == eta 
-				if ((n3-nmax) == 0 && (n3-nmax) == 0 && (n3-nmax) == 0 && self) continue;
+				if ((n1-nmax) == 0 && (n2-nmax) == 0 && (n3-nmax) == 0 && self) continue;
 				else{  
 					rn_vec(2) = v3[n3];
 					const double rsq = (rn_vec.transpose() * rn_vec);
 	                if ( rsq <= r_cutoffsq ){ 
-						Mreal += realSpcM(rsq, rn_vec, self, asq);
+						Mreal += realSpcM(rsq, rn_vec, asq);
 						
 					}
 				}
@@ -627,7 +629,7 @@ Matrix3d  CConfiguration::reciprocalSpcSm( const Vector3d & rij, const double as
         
 }
 
-Matrix3d  CConfiguration::realSpcM(const double & rsq, const Vector3d & rij, const bool self, const double asq) {
+Matrix3d  CConfiguration::realSpcM(const double & rsq, const Vector3d & rij, const double asq) {
     // Idea: To only account for tracer in one box, leave out eta = eta_tracer in sums entirely or something...
 	Matrix3d  I = Matrix3d::Identity();   
     const double r = sqrt(rsq);

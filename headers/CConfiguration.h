@@ -114,7 +114,7 @@ private:
 	Eigen::Matrix3d CholInvertPart (const Eigen::MatrixXd A);
 	Eigen::Matrix3d realSpcSm( const Eigen::Vector3d & rij, const bool self, const double asq );
 	Eigen::Matrix3d reciprocalSpcSm( const Eigen::Vector3d & rij, const double asq );
-	Eigen::Matrix3d realSpcM(const double & rsq, const Eigen::Vector3d & rij, const bool self, const double asq);
+	Eigen::Matrix3d realSpcM(const double & rsq, const Eigen::Vector3d & rij, const double asq);
 	Eigen::Matrix3d reciprocalSpcM(const double ksq, const Eigen::Vector3d & kij,  const double asq);
 	
 	Eigen::Matrix3d lub2p( Eigen::Vector3d rij, double rsq, unsigned int mmax );

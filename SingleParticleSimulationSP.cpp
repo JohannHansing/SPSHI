@@ -215,10 +215,11 @@ int main(int argc, const char* argv[]){
             conf.makeStep();    //move particle at the end of iteration
 
             
-            if (includeSteric && conf.testOverlap()) conf.moveBack();   //TODO steric2
+            /* //TODO steric2
+            if (includeSteric && conf.testOverlap()) conf.moveBack();
             else conf.checkBoxCrossing();
+            */ // end steric2
             
-            /*
                 //TODO steric
             while (includeSteric && conf.testOverlap()){
                 conf.moveBack();
@@ -227,7 +228,6 @@ int main(int argc, const char* argv[]){
             }
             conf.checkBoxCrossing(); //check if particle has crossed the confinement of the box
             // end steric
-            */
             
 
             if (stepcount%trajout == 0) {
@@ -293,10 +293,10 @@ string createDataFolder(bool resetpos, double timestep, double simtime, double p
     char range[5];
     sprintf(range, "%.3f", potRange);
     //In the definition of folder, the addition has to START WITH A STRING! for the compiler to know what to do (left to right).
-    string folder = "sim_data";
+    string folder = "sim_data/ewaldCorr";
     if (!resetpos) folder = folder + "/noreset";
     if (randomPot) folder = folder + "/ranPot";
-    if (steric) folder = folder + "/steric2";    //TODO steric2
+    if (steric) folder = folder + "/steric";    //TODO steric2
     if (potMod) folder = folder +  "/potMod";   //"/potMod";  TODO!!! Bessel
     if (hpi) folder = folder + "/HPI/hpiu" + toString(hpi_u) + "/hpik" + toString(hpi_k);
     folder = folder
