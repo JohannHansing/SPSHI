@@ -62,7 +62,7 @@ CConfiguration::CConfiguration(
     setRanNumberGen(0);
     
     //Ewald sum stuff
-    _nmax = 3; // This corresponds to a cutoff of r_cutoff = 1 * _boxsize
+    _nmax = 2; // This corresponds to a cutoff of r_cutoff = 1 * _boxsize
 	_alpha = sqrt(M_PI) / _boxsize; // This value for alpha corresponds to the suggestion in Beenakker1986
 	_k_cutoff = 2. * _alpha * _alpha * _nmax * _boxsize;   /* This corresponds to suggestion by Jain2012 ( equation 15 and 16 ). */
 	_nkmax = (int) (_k_cutoff * _boxsize / (2. * M_PI) + 0.5);   /* The last bit (+0.5) may be needed to ensure that the next higher integer 
@@ -75,18 +75,20 @@ CConfiguration::CConfiguration(
 	_g[0] = 2 * pow(lam, 2) * c1;
 	_g[1] = lam/5 * ( 1 + 7*lam + lam*lam ) * c1;
 	_g[2] = 1/42 * ( 1 + lam*(18 - lam*(29 + lam*(18 + lam)))) * c1;
-    _cutofflubSq = pow(12,2)*(pow(_polyrad,2) + pow(_pradius,2));
+    _cutofflubSq = pow(9,2)*(pow(_polyrad,2) + pow(_pradius,2));
 	
 	
 	// init HI vectors matrices, etc
+    _V = pow( _boxsize, 3);
     _cutoffMMsq = pow(0.1*_pradius,2);
     if (polymersize != 0) _HI = true;
 	if (_HI) {
 		_edgeParticles = (int) (_boxsize/polymersize + 0.001);
 		_epos.resize(3 * _edgeParticles - 2);
+		_LJPot = false;
+        // THIS NEEDS TO COME LAST !!!!!!!
 		initConstMobilityMatrix();
 		calcTracerMobilityMatrix(true);
-		_LJPot = false;
 	}
 }
 
@@ -471,9 +473,7 @@ void CConfiguration::initConstMobilityMatrix(){
     Matrix3d selfmob = realSpcSm( vec_rij, true, _pradius * _pradius ) + reciprocalSpcSm( vec_rij, _pradius * _pradius );
     double self_plus = 1 + _pradius / sqrt (M_PI) * ( - 6. * _alpha + 40. * pow(_alpha,3) * _pradius * _pradius / 3. );
 
-	_mobilityMatrix.block<3,3>(0,0) = selfmob + Matrix3d::Identity() * self_plus;
-    cout << "tracer eigen ewaldsum:\n" << selfmob << endl;
-    cout << "tracer eigen selfplus:\n" << self_plus << endl;
+	// _mobilityMatrix.block<3,3>(0,0) = selfmob + Matrix3d::Identity() * self_plus; // ewaldCorr
 	
 	// now on diagonals for edgeparticles
 	selfmob = realSpcSm( vec_rij, true, asq ) + reciprocalSpcSm( vec_rij, asq );
@@ -618,7 +618,7 @@ Matrix3d  CConfiguration::reciprocalSpcSm( const Vector3d & rij, const double as
 	                kvec(0) = n1 * ntok, kvec(1) = n2 * ntok, kvec(2) = n3 * ntok;
 					const double ksq = (kvec.transpose()*kvec);
                     if ( ksq <= k_cutoffsq ){  
-						Mreciprocal += reciprocalSpcM(ksq, kvec, asq) * cos((kvec.transpose()* kvec));
+						Mreciprocal += reciprocalSpcM(ksq, kvec, asq) * cos((kvec.transpose()* rij));
 					}
 				}
             }
@@ -654,10 +654,9 @@ Matrix3d  CConfiguration::realSpcM(const double & rsq, const Vector3d & rij, con
 Matrix3d  CConfiguration::reciprocalSpcM(const double ksq, const Vector3d & kij, const double asq) {
     Matrix3d  I = Matrix3d::Identity();  
 	const double alphasq = _alpha * _alpha;
-	const double V = pow( _boxsize, 3);
     const double c1 = ksq / ( 4. * alphasq );
 	
-	return _pradius * ( 1. - 0.333333 * asq * ksq ) * ( 1. + c1 + 2. * c1 * c1 ) * ( 6. * M_PI / (ksq * V)) * exp( -c1 ) 
+	return _pradius * ( 1. - 0.333333 * asq * ksq ) * ( 1. + c1 + 2. * c1 * c1 ) * ( 6. * M_PI / (ksq * _V)) * exp( -c1 ) 
         * ( I - (kij*kij.transpose())/ksq);
 		//alternative way from Brady1988 TODO alt
     // return _pradius  * ( 1. + c1 + 2. * c1 * c1 ) * ( 6. * M_PI / (ksq * V)) * exp( - c1 ) * ( I - (kij*kij.transpose())/ksq);
