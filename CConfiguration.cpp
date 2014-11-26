@@ -81,7 +81,7 @@ CConfiguration::CConfiguration(
 	
 	// init HI vectors matrices, etc
     _V = pow( _boxsize, 3);
-    _cutoffMMsq = pow(0.1*_pradius,2);
+    _cutoffMMsq = pow(0.05*_boxsize,2);
     if (polymersize != 0) _HI = true;
 	if (_HI) {
 		_edgeParticles = (int) (_boxsize/polymersize + 0.001);
