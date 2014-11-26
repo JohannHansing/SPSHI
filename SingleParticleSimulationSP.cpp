@@ -23,13 +23,13 @@ using namespace std;
 //Function declarations
 string createDataFolder(
         bool respos, double dt, double simtime, double potRange, double potStrength, double boxsize,
-        double particlesize, double rDist, bool potMod, bool steric, bool randomPot, bool hpi, double hpi_u, double hpi_k, double polymersize);
+        double particlesize, double rDist, bool ewaldCorr, bool steric, bool randomPot, bool hpi, double hpi_u, double hpi_k, double polymersize);
 void settingsFile(
         string folder, bool respos, double particlesize, double boxsize, double timestep, double runs, double steps,
-        double potStrength, double potRange, double rDist, bool potMod, bool recordMFP, bool steric, bool randomPot, bool hpi, double hpi_u,
+        double potStrength, double potRange, double rDist, bool ewaldCorr, bool recordMFP, bool steric, bool randomPot, bool hpi, double hpi_u,
 		double hpi_k, double polymersize, double executiontime);
 void printReport(bool resetPos, int entry, int opposite, int sides, const double timestep[], const double urange[], const double ustrength[], 
-        const double rodDist[], const double particlesize[], unsigned int runs, int tsize, int rsize, int ssize, int dsize, int psize, bool potMod, 
+        const double rodDist[], const double particlesize[], unsigned int runs, int tsize, int rsize, int ssize, int dsize, int psize, bool ewaldCorr, 
         bool steric, bool randomPot, bool hpi, double hpi_u, double hpi_k, double polymersize);
 
 template<typename T>
@@ -286,7 +286,7 @@ int main(int argc, const char* argv[]){
 
 
 string createDataFolder(bool resetpos, double timestep, double simtime, double potRange, double potStrength,
-        double boxsize, double particlesize, double rDist, bool potMod, bool steric, bool randomPot, bool hpi, double hpi_u, double hpi_k,
+        double boxsize, double particlesize, double rDist, bool ewaldCorr, bool steric, bool randomPot, bool hpi, double hpi_u, double hpi_k,
 		double polymersize){
     //NOTE: Maybe I can leave out dt, as soon as I settled on a timestep
     //NOTE: As soon as I create input-list with variables, I must change this function
@@ -294,10 +294,10 @@ string createDataFolder(bool resetpos, double timestep, double simtime, double p
     sprintf(range, "%.3f", potRange);
     //In the definition of folder, the addition has to START WITH A STRING! for the compiler to know what to do (left to right).
     string folder = "sim_data";
-    if (!resetpos) folder = folder + "/noreset";
+    if (!resetpos) folder = folder + "/noreset/lubCorr";
+    if (ewaldCorr) folder = folder +  "/ewaldCorr";
     if (randomPot) folder = folder + "/ranPot";
     if (steric) folder = folder + "/steric";    //TODO steric2
-    if (potMod) folder = folder +  "/potMod";   //"/potMod";  TODO!!! Bessel
     if (hpi) folder = folder + "/HPI/hpiu" + toString(hpi_u) + "/hpik" + toString(hpi_k);
     folder = folder
             + "/dt" + toString(timestep)
@@ -316,7 +316,7 @@ string createDataFolder(bool resetpos, double timestep, double simtime, double p
 
 
 void settingsFile(string folder, bool resetpos, double particlesize, double boxsize, double timestep, double runs, double steps, 
-    double potStrength, double potRange, double rDist, bool potMod, bool recordMFP, bool steric, bool randomPot, bool hpi, double hpi_u, double hpi_k, 
+    double potStrength, double potRange, double rDist, bool ewaldCorr, bool recordMFP, bool steric, bool randomPot, bool hpi, double hpi_u, double hpi_k, 
 	double polymersize, double executiontime){
     //Creates a file where the simulation settings are stored
     //MAYBE ALSO INCLUDE TIME AND DATE!!
@@ -327,7 +327,7 @@ void settingsFile(string folder, bool resetpos, double particlesize, double boxs
     << " hours." << "\n\n";
     settingsfile << "Sim dir: " << folder << endl;
     settingsfile << "ResetPos " << resetpos << endl;
-    settingsfile << "potMod " << potMod << endl;//" (Bessel)" << endl;  //TODO Bessel!
+    settingsfile << "ewaldCorr " << ewaldCorr << endl;//" (Bessel)" << endl;  //TODO Bessel!
     settingsfile << "recordMFP " << recordMFP << endl;
     settingsfile << "includesteric " << steric << endl;
     settingsfile << "ranPot " << randomPot  << endl;

@@ -15,7 +15,7 @@ CConfiguration::CConfiguration(){
 }
 
 CConfiguration::CConfiguration(
-        double timestep,  double potRange,  double potStrength,  double boxsize, double rodDistance, const bool potMod,
+        double timestep,  double potRange,  double potStrength,  double boxsize, double rodDistance, const bool ewaldCorr,
         double psize, const bool posHisto, const bool steric, const bool ranU, bool hpi, double hpi_u, double hpi_k,
 		double polymersize)
 		{
@@ -27,7 +27,7 @@ CConfiguration::CConfiguration(
     _resetpos = _boxsize/2;
     _timestep = timestep;
     _rodDistance = rodDistance;
-    _potMod = potMod;
+    _ewaldCorr = ewaldCorr;
     _LJPot = (steric == false) && (psize != 0);
     _ranU = ranU;
     _poly = CPolymers();
@@ -45,6 +45,7 @@ CConfiguration::CConfiguration(
         _wallcrossings[i] = 0;
         _boxnumberXYZ[i] = 0;
         _prevpos[i] = _resetpos;
+        _lastcheck[i] = _startpos[i];
     }
 
     if (posHisto) initPosHisto();
@@ -63,7 +64,7 @@ CConfiguration::CConfiguration(
     
     //Ewald sum stuff
     _nmax = 2; // This corresponds to a cutoff of r_cutoff = 1 * _boxsize
-	_alpha = sqrt(M_PI) / _boxsize; // This value for alpha corresponds to the suggestion in Beenakker1986
+	_alpha = 0.8 * sqrt(M_PI) / _boxsize; // This value for alpha corresponds to the suggestion in Beenakker1986
 	_k_cutoff = 2. * _alpha * _alpha * _nmax * _boxsize;   /* This corresponds to suggestion by Jain2012 ( equation 15 and 16 ). */
 	_nkmax = (int) (_k_cutoff * _boxsize / (2. * M_PI) + 0.5);   /* The last bit (+0.5) may be needed to ensure that the next higher integer 
 		                                                   * k value is taken for kmax */
@@ -243,11 +244,8 @@ void CConfiguration::calcMobilityForces(){
             }
 
             r_abs = sqrt(r_i * r_i + r_k * r_k); //distance to the rods
-				
-			
 
-            if (_potMod) calculateExpPotentialMOD(r_abs, utmp, frtmp, plane);
-            else calculateExpPotential(r_abs, utmp, frtmp);
+            calculateExpPotential(r_abs, utmp, frtmp);
 			
 			if (_hpi) calculateExpHPI(r_abs, utmp, frtmp);
 
@@ -373,25 +371,6 @@ void CConfiguration::calculateExpHPI(const double r, double& U, double& Fr){
 }
 */
 
-void CConfiguration::calculateExpPotentialMOD(const double r, double& U, double& Fr, int plane){
-    //function to calculate an exponential Potential U = U_0 * exp(-1 * r * k)
-    // k is the interaction range. U_0 is the strength of the potential
-    //which is attractive if direction = -1, and repulsive if direction = 1
-    //The potential is weighted with kT!
-    //index, is the dimension (x, y or z) which is normal to the plane that the potential is being calculated in.
-
-	 // U = _potStrength * exp(-1 * r / _potRange) * ( 1 - 2 / 3 * pow((2*_ppos[3-index]/_boxsize - 1), 2));
-	 U = _potStrength * exp( -r / _potRange) * (1 - abs(2 * _ppos[plane]/_boxsize - 1) * 0.66667);
-	 Fr = U / (_potRange * r);  //This is the force divided by the distance to the rod!
-	 
-    //DEBYE!!!
-   // U = _potStrength * exp(-1 * r / _potRange) / r;
-    //    Fr = U * (1/_potRange + 1/r) / r;  //This is the force divided by the distance to the rod!
-	 
-    // BESSEL
-  //  U = 2 * _potStrength * boost::math::cyl_bessel_k(0, r / _potRange);
-  //  Fr = 2 * _potStrength * boost::math::cyl_bessel_k(1, r / _potRange) / (_potRange * r);
-}
 
 void CConfiguration::modifyPot(double& U, double& Fr, double dist){
     //function to modify the potential according to the distance along the polymer axis to the next neighbor,
@@ -473,7 +452,7 @@ void CConfiguration::initConstMobilityMatrix(){
     Matrix3d selfmob = realSpcSm( vec_rij, true, _pradius * _pradius ) + reciprocalSpcSm( vec_rij, _pradius * _pradius );
     double self_plus = 1 + _pradius / sqrt (M_PI) * ( - 6. * _alpha + 40. * pow(_alpha,3) * _pradius * _pradius / 3. );
 
-	// _mobilityMatrix.block<3,3>(0,0) = selfmob + Matrix3d::Identity() * self_plus; // ewaldCorr
+	if (_ewaldCorr) _mobilityMatrix.block<3,3>(0,0) = selfmob + Matrix3d::Identity() * self_plus; // ewaldCorr
 	
 	// now on diagonals for edgeparticles
 	selfmob = realSpcSm( vec_rij, true, asq ) + reciprocalSpcSm( vec_rij, asq );
@@ -652,10 +631,10 @@ Matrix3d  CConfiguration::realSpcM(const double & rsq, const Vector3d & rij, con
 
 
 Matrix3d  CConfiguration::reciprocalSpcM(const double ksq, const Vector3d & kij, const double asq) {
-    Matrix3d  I = Matrix3d::Identity();  
+    Matrix3d  I = Matrix3d::Identity();
 	const double alphasq = _alpha * _alpha;
     const double c1 = ksq / ( 4. * alphasq );
-	
+
 	return _pradius * ( 1. - 0.333333 * asq * ksq ) * ( 1. + c1 + 2. * c1 * c1 ) * ( 6. * M_PI / (ksq * _V)) * exp( -c1 ) 
         * ( I - (kij*kij.transpose())/ksq);
 		//alternative way from Brady1988 TODO alt
@@ -685,8 +664,8 @@ Matrix3d  CConfiguration::lubricate( const Vector3d & rij ){
 				rn_vec(2) = values_3[n3];
 				const double rsq = (rn_vec.transpose() * rn_vec);
                 if ( rsq <= _cutofflubSq ){ 
-					if (rsq < _cutofflubSq/2) lubPart += lub2p(rn_vec, rsq, 10);
-					else lubPart += lub2p(rn_vec, rsq, 7);
+					if (rsq < _cutofflubSq/2) lubPart += lub2p(rn_vec, rsq, 8);
+					else lubPart += lub2p(rn_vec, rsq, 5);
 				}
 			}
 		}
@@ -716,7 +695,7 @@ Matrix3d CConfiguration::lub2p( Vector3d rij, double rsq, unsigned int mmax ){
 
 	//cout << "\n------- lubR -----" << endl;
 	//cout << lubR << endl;
-	return lubR * (_pradius + _polyrad)/(2*_pradius);
+	return lubR; // * (_pradius + _polyrad)/(2*_pradius);  // TODO this correction for lubrication normalization is wrong I think
 }
 
 

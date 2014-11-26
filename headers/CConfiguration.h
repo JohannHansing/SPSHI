@@ -45,7 +45,7 @@ private:
 
 
     //bool Parameters
-    bool _potMod;             // true if the modified exponential potential version is used that is not 3*U_0 at the intersections.
+    bool _ewaldCorr;             // true if the modified exponential potential version is used that is not 3*U_0 at the intersections.
     bool _LJPot;              // if true, then LJ interaction is calculated for steric hindrance
     bool _ranU;
     bool _hpi;
@@ -105,7 +105,6 @@ private:
     void countWallCrossing(int crossaxis, int exitmarker);
     void calculateExpHPI(const double r, double& U, double& Fr);
     void calculateExpPotential(const double r, double& U, double& Fr);
-    void calculateExpPotentialMOD(const double r, double& U, double& Fr, int index);
     void modifyPot(double& U, double& Fr, double dist);
     void calcLJPot(const double r, double &U, double &dU);
     void initPosHisto();
@@ -128,7 +127,7 @@ private:
 public:
     CConfiguration();
     CConfiguration(
-            double timestep,  double potRange,  double potStrength,  double boxsize, double rodDistance, const bool potMod, double psize,
+            double timestep,  double potRange,  double potStrength,  double boxsize, double rodDistance, const bool ewaldCorr, double psize,
             const bool posHisto, const bool steric, const bool ranU,  bool hpi, double hpi_u, double hpi_k, double polymersize);
     void resetParameters(double timestep, double potRange, double potStrength, double boxsize);
     void updateStartpos();
