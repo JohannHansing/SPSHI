@@ -49,6 +49,7 @@ private:
     bool _LJPot;              // if true, then LJ interaction is calculated for steric hindrance
     bool _ranU;
     bool _hpi;
+    bool _noLub;
 
     //COUNTERS AND INIT VALUES
     int _boxnumberXYZ[3];           //counter to calculate the actual position of the particle

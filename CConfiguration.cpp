@@ -16,7 +16,7 @@ CConfiguration::CConfiguration(){
 
 CConfiguration::CConfiguration(
         double timestep,  double potRange,  double potStrength,  double boxsize, double rodDistance, const bool ewaldCorr,
-        double psize, const bool posHisto, const bool steric, const bool ranU, bool hpi, double hpi_u, double hpi_k,
+        double psize, const bool noLub, const bool steric, const bool ranU, bool hpi, double hpi_u, double hpi_k,
 		double polymersize)
 		{
     _potRange = potRange;
@@ -28,6 +28,7 @@ CConfiguration::CConfiguration(
     _timestep = timestep;
     _rodDistance = rodDistance;
     _ewaldCorr = ewaldCorr;
+    _noLub = noLub;
     _LJPot = (steric == false) && (psize != 0);
     _ranU = ranU;
     _poly = CPolymers();
@@ -47,7 +48,9 @@ CConfiguration::CConfiguration(
         _prevpos[i] = _resetpos;
         _lastcheck[i] = _startpos[i];
     }
-
+    
+    
+    bool posHisto = false;
     if (posHisto) initPosHisto();
 	
 
@@ -64,7 +67,7 @@ CConfiguration::CConfiguration(
     
     //Ewald sum stuff
     _nmax = 2; // This corresponds to a cutoff of r_cutoff = 1 * _boxsize
-	_alpha = 0.8 * sqrt(M_PI) / _boxsize; // This value for alpha corresponds to the suggestion in Beenakker1986
+	_alpha = 1 * sqrt(M_PI) / _boxsize; // This value for alpha corresponds to the suggestion in Beenakker1986
 	_k_cutoff = 2. * _alpha * _alpha * _nmax * _boxsize;   /* This corresponds to suggestion by Jain2012 ( equation 15 and 16 ). */
 	_nkmax = (int) (_k_cutoff * _boxsize / (2. * M_PI) + 0.5);   /* The last bit (+0.5) may be needed to ensure that the next higher integer 
 		                                                   * k value is taken for kmax */
@@ -76,7 +79,7 @@ CConfiguration::CConfiguration(
 	_g[0] = 2 * pow(lam, 2) * c1;
 	_g[1] = lam/5 * ( 1 + 7*lam + lam*lam ) * c1;
 	_g[2] = 1/42 * ( 1 + lam*(18 - lam*(29 + lam*(18 + lam)))) * c1;
-    _cutofflubSq = pow(9,2)*(pow(_polyrad,2) + pow(_pradius,2));
+    _cutofflubSq = pow(7,2)*(pow(_polyrad,2) + pow(_pradius,2));
 	
 	
 	// init HI vectors matrices, etc
@@ -450,7 +453,7 @@ void CConfiguration::initConstMobilityMatrix(){
 	
 	// on-diagonal elements of mobility matrix: Tracer first
     Matrix3d selfmob = realSpcSm( vec_rij, true, _pradius * _pradius ) + reciprocalSpcSm( vec_rij, _pradius * _pradius );
-    double self_plus = 1 + _pradius / sqrt (M_PI) * ( - 6. * _alpha + 40. * pow(_alpha,3) * _pradius * _pradius / 3. );
+    double self_plus = 1. + _pradius / sqrt (M_PI) * ( - 6. * _alpha + 40. * pow(_alpha,3) * _pradius * _pradius / 3. );
 
 	if (_ewaldCorr) _mobilityMatrix.block<3,3>(0,0) = selfmob + Matrix3d::Identity() * self_plus; // ewaldCorr
 	
@@ -493,8 +496,9 @@ void CConfiguration::initConstMobilityMatrix(){
 	//		cout << "real: " << realSpcSm( vec_rij, false ) << " ---- reciprocal: " << reciprocalSpcSm( vec_rij, false ) << endl;
 			
 			// both lower and upper triangular of symmetric matrix need be filled
-			_mobilityMatrix.block<3,3>(j_count,i_count) = selfmob;
-			_mobilityMatrix.block<3,3>(i_count,j_count) = selfmob;
+			_mobilityMatrix.block<3,3>(j_count,i_count) = muij;
+			_mobilityMatrix.block<3,3>(i_count,j_count) = muij;
+            //cout << "----------------\n" << selfmob << endl;
 		}
 	}	
 }
@@ -524,7 +528,7 @@ void CConfiguration::calcTracerMobilityMatrix(bool full){
 			_mobilityMatrix.block<3,3>(0,j_count) = muij;
 			//noalias(subrange(_mobilityMatrix, j_count, j_count + 3, 0, 3)) = muij;
 		}
-		lubM += lubricate(vec_rij);
+		if (!_noLub) lubM += lubricate(vec_rij);
 	}
 	//cout << "############# _mobilityMatrix #########\n" << _mobilityMatrix << endl;
         //cout << "############# lubM #########\n" << lubM << endl;
@@ -532,12 +536,13 @@ void CConfiguration::calcTracerMobilityMatrix(bool full){
 	// create resistance matrix - Some elements remain constant throughout the simulation. Those are stored here.
 	if (full){ 
 		 _resMNoLub = CholInvertPart(_mobilityMatrix); 
+         //cout << "$$$$$$$ _resMNoLub $$$$$$$$$\n" << _resMNoLub << endl;
 	}
-	// Add lubrication Part to tracer Resistance Matrix
-	Matrix3d tracerResMat = _resMNoLub + lubM;
-	
-	_tracerMM = CholInvertPart(tracerResMat);
-        //cout << "############# _tracerMM #########\n" << _tracerMM << endl;
+	// Add lubrication Part to tracer Resistance Matrix and invert	
+	_tracerMM = CholInvertPart(_resMNoLub + lubM);
+    //cout << "$$$$$$$ lubM $$$$$$$$$\n" << lubM << endl;
+    //cout << "############# _tracerMM #########\n" << _tracerMM << endl;
+    //cout << _ppos[0] << " " << _ppos[1] << " "<< _ppos[2] << endl;
 }
 
 

@@ -23,14 +23,12 @@ using namespace std;
 //Function declarations
 string createDataFolder(
         bool respos, double dt, double simtime, double potRange, double potStrength, double boxsize,
-        double particlesize, double rDist, bool ewaldCorr, bool steric, bool randomPot, bool hpi, double hpi_u, double hpi_k, double polymersize);
+        double particlesize, double rDist, bool ewaldCorr, bool steric, bool randomPot, bool hpi, double hpi_u, double hpi_k, double polymersize, bool noLub);
 void settingsFile(
         string folder, bool respos, double particlesize, double boxsize, double timestep, double runs, double steps,
         double potStrength, double potRange, double rDist, bool ewaldCorr, bool recordMFP, bool steric, bool randomPot, bool hpi, double hpi_u,
-		double hpi_k, double polymersize, double executiontime);
-void printReport(bool resetPos, int entry, int opposite, int sides, const double timestep[], const double urange[], const double ustrength[], 
-        const double rodDist[], const double particlesize[], unsigned int runs, int tsize, int rsize, int ssize, int dsize, int psize, bool ewaldCorr, 
-        bool steric, bool randomPot, bool hpi, double hpi_u, double hpi_k, double polymersize);
+		double hpi_k, double polymersize, double executiontime, bool noLub);
+
 
 template<typename T>
 string toString(const T& value);
@@ -55,9 +53,9 @@ int main(int argc, const char* argv[]){
     //TRIGGERS:
     bool writeTrajectory = (strcmp(argv[1] , "true") == 0 ) ;    // relative position TODO
     bool resetPos = (strcmp(argv[2] , "true") == 0 ) ;
-    bool potentialMod = (strcmp(argv[3] , "true") == 0 ) ;       //BESSEL TODO
+    bool ewaldCorr = (strcmp(argv[3] , "true") == 0 ) ;       //BESSEL TODO
     bool recordMFP = (strcmp(argv[4] , "true") == 0 ) ;
-    bool recordPosHisto = (strcmp(argv[5] , "true") == 0 ) ;
+    bool noLub = (strcmp(argv[5] , "true") == 0 ) ;
     bool includeSteric = (strcmp(argv[6] , "true") == 0 ) ;  // steric 2
 	bool ranPot = (strcmp(argv[7] , "true") == 0 ) ;
 	bool hpi = (strcmp(argv[8] , "true") == 0 ) ;          // hpi exp
@@ -108,7 +106,7 @@ int main(int argc, const char* argv[]){
     double fpInt = boxsize/10;
 
     //printReport(resetPos, conf.getwallcrossings(0), conf.getwallcrossings(1), conf.getwallcrossings(2), timestep, urange, ustrength, rodDist, particlesize, runs,
-    //            sizeOfArray(timestep), sizeOfArray(urange), sizeOfArray(ustrength), sizeOfArray(rodDist), sizeOfArray(particlesize), potentialMod, includeSteric);
+    //            sizeOfArray(timestep), sizeOfArray(urange), sizeOfArray(ustrength), sizeOfArray(rodDist), sizeOfArray(particlesize), ewaldCorr, includeSteric);
 
 
     
@@ -118,8 +116,8 @@ int main(int argc, const char* argv[]){
     const int MMcalcStep = (int)(0.05/timestep);
         
     //Create data folders and print location as string to string "folder"
-    string folder = createDataFolder(resetPos, timestep, simtime, urange, ustrength, boxsize, particlesize, rodDist, potentialMod, 
-                                     includeSteric, ranPot, hpi, hpi_u, hpi_k, polymersize);
+    string folder = createDataFolder(resetPos, timestep, simtime, urange, ustrength, boxsize, particlesize, rodDist, ewaldCorr, 
+                                     includeSteric, ranPot, hpi, hpi_u, hpi_k, polymersize, noLub);
 
 
     //initialize averages
@@ -135,7 +133,7 @@ int main(int argc, const char* argv[]){
 
     
     //initialize instance of configuration
-    CConfiguration conf = CConfiguration(timestep, urange, ustrength, boxsize, rodDist, potentialMod, particlesize, recordPosHisto, includeSteric,
+    CConfiguration conf = CConfiguration(timestep, urange, ustrength, boxsize, rodDist, ewaldCorr, particlesize, noLub, includeSteric,
     ranPot, hpi , hpi_u, hpi_k, polymersize);
 		
 
@@ -234,7 +232,7 @@ int main(int argc, const char* argv[]){
                 std::vector<double> ppos = conf.getppos();
                 trajectoryfile << fixed << stepcount * timestep << "\t" << ppos[0] << " " << ppos[1] << " " << ppos[2] << endl;
             }
-            if (((i % 5) == 0) && recordPosHisto) conf.addHistoValue();
+            //if (((i % 5) == 0) && recordPosHisto) conf.addHistoValue();
         }
     }//----------END OF RUNS-LOOP
 
@@ -251,12 +249,12 @@ int main(int argc, const char* argv[]){
     //if (recordMFP) mfp_x.saveAverageFPValue(fpInt);
     if (recordMFP) mfp_xyz.saveAverageFPValue(fpInt);
 
-    if ( recordPosHisto ) conf.printHistoMatrix(folder);
+    //if ( recordPosHisto ) conf.printHistoMatrix(folder);
 
 
 
     //printReport(resetPos, conf.getwallcrossings(0), conf.getwallcrossings(1), conf.getwallcrossings(2), timestep, urange, ustrength, rodDist, particlesize, runs,
-    //        sizeOfArray(timestep), sizeOfArray(urange), sizeOfArray(ustrength), sizeOfArray(rodDist), sizeOfArray(particlesize), potentialMod, includeSteric);
+    //        sizeOfArray(timestep), sizeOfArray(urange), sizeOfArray(ustrength), sizeOfArray(rodDist), sizeOfArray(particlesize), ewaldCorr, includeSteric);
 
     
 	cout << "Simulation Finished" << endl;
@@ -266,7 +264,7 @@ int main(int argc, const char* argv[]){
 	
 	//If settingsFile is saved, then the simulation was successfull
     settingsFile(folder, resetPos, particlesize, boxsize, timestep, runs, steps, ustrength, urange, rodDist, 
-	potentialMod, recordMFP, includeSteric, ranPot ,hpi, hpi_u, hpi_k, polymersize, (runtime/3600));
+	ewaldCorr, recordMFP, includeSteric, ranPot ,hpi, hpi_u, hpi_k, polymersize, (runtime/3600), noLub);
 	
 	trajectoryfile.close();
 	
@@ -287,15 +285,16 @@ int main(int argc, const char* argv[]){
 
 string createDataFolder(bool resetpos, double timestep, double simtime, double potRange, double potStrength,
         double boxsize, double particlesize, double rDist, bool ewaldCorr, bool steric, bool randomPot, bool hpi, double hpi_u, double hpi_k,
-		double polymersize){
+		double polymersize, bool noLub){
     //NOTE: Maybe I can leave out dt, as soon as I settled on a timestep
     //NOTE: As soon as I create input-list with variables, I must change this function
     char range[5];
     sprintf(range, "%.3f", potRange);
     //In the definition of folder, the addition has to START WITH A STRING! for the compiler to know what to do (left to right).
     string folder = "sim_data";
-    if (!resetpos) folder = folder + "/noreset/lubCorr";
+    if (!resetpos) folder = folder + "/noreset";
     if (ewaldCorr) folder = folder +  "/ewaldCorr";
+    if (noLub) folder = folder +  "/noLub";
     if (randomPot) folder = folder + "/ranPot";
     if (steric) folder = folder + "/steric";    //TODO steric2
     if (hpi) folder = folder + "/HPI/hpiu" + toString(hpi_u) + "/hpik" + toString(hpi_k);
@@ -317,7 +316,7 @@ string createDataFolder(bool resetpos, double timestep, double simtime, double p
 
 void settingsFile(string folder, bool resetpos, double particlesize, double boxsize, double timestep, double runs, double steps, 
     double potStrength, double potRange, double rDist, bool ewaldCorr, bool recordMFP, bool steric, bool randomPot, bool hpi, double hpi_u, double hpi_k, 
-	double polymersize, double executiontime){
+	double polymersize, double executiontime, bool noLub){
     //Creates a file where the simulation settings are stored
     //MAYBE ALSO INCLUDE TIME AND DATE!!
     ofstream settingsfile;
@@ -327,7 +326,8 @@ void settingsFile(string folder, bool resetpos, double particlesize, double boxs
     << " hours." << "\n\n";
     settingsfile << "Sim dir: " << folder << endl;
     settingsfile << "ResetPos " << resetpos << endl;
-    settingsfile << "ewaldCorr " << ewaldCorr << endl;//" (Bessel)" << endl;  //TODO Bessel!
+    settingsfile << "ewaldCorr " << ewaldCorr << endl;
+    settingsfile << "noLub " << noLub << endl;
     settingsfile << "recordMFP " << recordMFP << endl;
     settingsfile << "includesteric " << steric << endl;
     settingsfile << "ranPot " << randomPot  << endl;
@@ -341,7 +341,7 @@ void settingsFile(string folder, bool resetpos, double particlesize, double boxs
     settingsfile << "b " << boxsize << endl;
     settingsfile << "dt " << timestep  << endl << "runs " << runs << endl << "steps " << steps << endl << "time: " << timestep*steps << endl;
     settingsfile << "k " << potRange << endl << "U_0 " << potStrength << endl;
-    settingsfile << "a" << polymersize << endl;
+    settingsfile << "a " << polymersize << endl;
 
     settingsfile.close();
 }
