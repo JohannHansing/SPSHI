@@ -117,25 +117,66 @@ void CConfiguration::checkDisplacementforMM(){
         _lastcheck[2] = _ppos[2] + _boxsize *  _boxnumberXYZ[2];
     }
 	else calcTracerMobilityMatrix(false);
+
+}
+
+Vector3d CConfiguration::midpointScheme(Vector3d V0dt, Vector3d F){
+    // Implementation of midpoint scheme according to Banchio2003
+    double ppos_prime[3];
+    int n = 100;
+    for (int i = 0; i<3; i++){
+        ppos_prime[i] = _ppos[i] + V0dt(i) / n;
+    }
+    
+	Vector3d vec_rij(3);
+	Matrix3d lubM = Matrix3d::Zero(); 
+	
+// loop over tracer - particle mobility matrix elements
+	for (unsigned int j = 0; j < 3 * _edgeParticles - 2; j++){
+		vec_rij(0) = ppos_prime[0] - _epos[j][0];
+		vec_rij(1) = ppos_prime[1] - _epos[j][1];
+		vec_rij(2) = ppos_prime[2] - _epos[j][2];
+		lubM += lubricate(vec_rij);
+	}
+	//cout << "############# _mobilityMatrix #########\n" << _mobilityMatrix << endl;
+    //cout << "############# lubM #########\n" << lubM << endl;
+
+
+	// Add lubrication Part to tracer Resistance Matrix and invert	
+    Matrix3d tracerMM_prime = CholInvertPart(_resMNoLub + lubM);
+    
+    // Note that _f_sto has variance sqrt( _tracerMM ), as it is advised in the paper of Banchio2003
+	Vector3d V_primedt = tracerMM_prime * (F * _timestep + _f_sto * _mu_sto);
+    
+    // return V_drift * dt
+    return n/2 * (V_primedt - V0dt);
+    
 }
 
 
 void CConfiguration::makeStep(){
     //move the particle according to the forces and record trajectory like watched by outsider
 //	if (_HI){
+
 	
     Vector3d F;
     for (int i = 0; i < 3; i++){
         F(i) = _f_mob[i];
         _prevpos[i] = _ppos[i];
     }
-		Vector3d MMdotF = _tracerMM*F;
-		
-		
-		// Update particle position
-		for (int i = 0; i < 3; i++){
-		    _ppos[i] += MMdotF(i) * _timestep + _f_sto(i) * _mu_sto;
-		}
+        
+    Vector3d V0dt = _tracerMM * (F * _timestep + _f_sto * _mu_sto);
+    
+    Vector3d Vdriftdt;
+
+    if (_HI && !_noLub) Vdriftdt = midpointScheme(V0dt, F);
+    cout <<Vdriftdt << " --- " << V0dt << endl;
+    cout << " ************************ " << endl;
+
+	// Update particle position
+	for (int i = 0; i < 3; i++){
+	    _ppos[i] += V0dt(i) + Vdriftdt(i);
+	}
 		
 /*	}
 	else{
@@ -202,7 +243,7 @@ void CConfiguration::calcStochasticForces(){
     
 	if (_HI){  
 	    // return correlated random vector, which is scaled later by sqrt(2 dt)
-	    _f_sto = _tracerMM.llt().matrixL() * ran_v;
+	    _f_sto = _RMLub.llt().matrixL() * ran_v;
 	}
 
     else { // no HI
@@ -539,7 +580,8 @@ void CConfiguration::calcTracerMobilityMatrix(bool full){
          //cout << "$$$$$$$ _resMNoLub $$$$$$$$$\n" << _resMNoLub << endl;
 	}
 	// Add lubrication Part to tracer Resistance Matrix and invert	
-	_tracerMM = CholInvertPart(_resMNoLub + lubM);
+    _RMLub = _resMNoLub + lubM;
+	_tracerMM = CholInvertPart(_RMLub);
     //cout << "$$$$$$$ lubM $$$$$$$$$\n" << lubM << endl;
     //cout << "############# _tracerMM #########\n" << _tracerMM << endl;
     //cout << _ppos[0] << " " << _ppos[1] << " "<< _ppos[2] << endl;

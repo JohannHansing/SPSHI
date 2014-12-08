@@ -75,6 +75,7 @@ private:
 	Eigen::MatrixXd _mobilityMatrix;
 	Eigen::Matrix3d _tracerMM;     
 	Eigen::Matrix3d _resMNoLub;
+    Eigen::Matrix3d _RMLub;
 	bool _HI;
 	double _polyrad;
 	int _edgeParticles;
@@ -120,6 +121,7 @@ private:
 	
 	Eigen::Matrix3d lub2p( Eigen::Vector3d rij, double rsq, unsigned int mmax );
 	Eigen::Matrix3d lubricate( const Eigen::Vector3d & rij );
+    Eigen::Vector3d midpointScheme(Eigen::Vector3d V0dt, Eigen::Vector3d F);
     void calcTracerMobilityMatrix(bool full);
 
 
