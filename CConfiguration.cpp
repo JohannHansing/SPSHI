@@ -80,6 +80,7 @@ CConfiguration::CConfiguration(
 	_g[1] = lam/5 * ( 1 + 7*lam + lam*lam ) * c1;
 	_g[2] = 1/42 * ( 1 + lam*(18 - lam*(29 + lam*(18 + lam)))) * c1;
     _cutofflubSq = pow(7,2)*(pow(_polyrad,2) + pow(_pradius,2));
+    _stericrSq = pow(_pradius + _polyrad, 2);
 	
 	
 	// init HI vectors matrices, etc
@@ -123,7 +124,7 @@ void CConfiguration::checkDisplacementforMM(){
 Vector3d CConfiguration::midpointScheme(Vector3d V0dt, Vector3d F){
     // Implementation of midpoint scheme according to Banchio2003
     double ppos_prime[3];
-    int n = 100;
+    int n = 200;
     for (int i = 0; i<3; i++){
         ppos_prime[i] = _ppos[i] + V0dt(i) / n;
     }
@@ -170,8 +171,6 @@ void CConfiguration::makeStep(){
     Vector3d Vdriftdt;
 
     if (_HI && !_noLub) Vdriftdt = midpointScheme(V0dt, F);
-    cout <<Vdriftdt << " --- " << V0dt << endl;
-    cout << " ************************ " << endl;
 
 	// Update particle position
 	for (int i = 0; i < 3; i++){
@@ -445,7 +444,7 @@ bool CConfiguration::testOverlap(){
                     if (i == 0) r_k -= _rodDistance;
                 }
                 r_sq = r_i * r_i + r_k * r_k; //distance to the rods
-                if (r_sq <= pow(_pradius + _polyrad, 2)){
+                if (r_sq <= _stericrSq){
                     overlaps = true;
                     continue;
                 }
@@ -582,6 +581,17 @@ void CConfiguration::calcTracerMobilityMatrix(bool full){
 	// Add lubrication Part to tracer Resistance Matrix and invert	
     _RMLub = _resMNoLub + lubM;
 	_tracerMM = CholInvertPart(_RMLub);
+    // cout << "tracerMM\n" << _tracerMM << endl;
+//     cout << "inv(tracerMM)\n" << CholInvertPart(_tracerMM) << endl;
+//     cout << "_RMLub\n" << _RMLub << endl;
+//     cout << "---XXXX---\n";
+//     Matrix3d tmp = (_RMLub.llt().matrixL() * Matrix3d::Identity()).transpose();
+//     cout <<  tmp * _RMLub.llt().matrixL() << endl;
+//     cout << "------\n";
+//     cout << _RMLub.llt().matrixL() * Matrix3d::Identity() << endl;
+//     tmp = (_tracerMM.llt().matrixL() * Matrix3d::Identity()).transpose();
+//     cout <<  tmp  << endl;
+//     cout << "******************************" << endl;
     //cout << "$$$$$$$ lubM $$$$$$$$$\n" << lubM << endl;
     //cout << "############# _tracerMM #########\n" << _tracerMM << endl;
     //cout << _ppos[0] << " " << _ppos[1] << " "<< _ppos[2] << endl;
@@ -722,6 +732,10 @@ Matrix3d  CConfiguration::lubricate( const Vector3d & rij ){
 
 Matrix3d CConfiguration::lub2p( Vector3d rij, double rsq, unsigned int mmax ){
 	// This function returns the 3x3 lubrication part of the resistance matrix of the tracer particle
+    
+    //If there is particle overlap, set particle surface distance for lubrication to be very small, according to Phung1996
+    if (rsq <= _stericrSq) rsq = _stericrSq + 0.0000000001;
+    
 	double s = 2*sqrt(rsq)/(_pradius + _polyrad);
 	// cout << "\ns " << s << endl;
 	double c1 = pow(2/s, 2);
@@ -759,7 +773,7 @@ Matrix3d CConfiguration::CholInvertPart (const MatrixXd A) {
 	assert( A.rows() == A.cols() );
 
     // perform inversion by cholesky decompoposition and return upper left 3x3 block
-    return A.llt().solve(I).block<3,3>(0,0);
+    return A.ldlt().solve(I).block<3,3>(0,0);
 }
 
 

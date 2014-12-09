@@ -81,6 +81,7 @@ private:
 	int _edgeParticles;
     double _lastcheck[3];
     double _cutoffMMsq;
+    double _stericrSq;
     
 	
 	
