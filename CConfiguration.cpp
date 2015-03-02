@@ -95,6 +95,7 @@ CConfiguration::CConfiguration(
 		initConstMobilityMatrix();
 		calcTracerMobilityMatrix(true);
 	}
+
 }
 
 void CConfiguration::updateStartpos(){
@@ -144,7 +145,7 @@ Vector3d CConfiguration::midpointScheme(Vector3d V0dt, Vector3d F){
 
 
 	// Add lubrication Part to tracer Resistance Matrix and invert	
-    Matrix3d tracerMM_prime = CholInvertPart(_resMNoLub + lubM);
+    Matrix3d tracerMM_prime = invert3x3(_resMNoLub + lubM);
     
     // Note that _f_sto has variance sqrt( _tracerMM ), as it is advised in the paper of Banchio2003
 	Vector3d V_primedt = tracerMM_prime * (F * _timestep + _f_sto * _mu_sto);
@@ -158,19 +159,26 @@ Vector3d CConfiguration::midpointScheme(Vector3d V0dt, Vector3d F){
 void CConfiguration::makeStep(){
     //move the particle according to the forces and record trajectory like watched by outsider
 //	if (_HI){
+    Vector3d Vdriftdt = Vector3d::Zero();
+    Vector3d V0dt = Vector3d::Zero();
 
-	
     Vector3d F;
     for (int i = 0; i < 3; i++){
         F(i) = _f_mob[i];
         _prevpos[i] = _ppos[i];
     }
-        
-    Vector3d V0dt = _tracerMM * (F * _timestep + _f_sto * _mu_sto);
-    
-    Vector3d Vdriftdt;
 
-    if (_HI && !_noLub) Vdriftdt = midpointScheme(V0dt, F);
+    bool v_nan = true;
+    while (v_nan){  // This loop repeats until the the midpoint scheme does not result in a NaN anymore!
+        V0dt = _tracerMM * (F * _timestep + _f_sto * _mu_sto);
+
+        if (_HI && !_noLub) Vdriftdt = midpointScheme(V0dt, F);   //TODO  Enable mid-point-scheme / backflow
+        v_nan = std::isnan(Vdriftdt(0));
+        if (v_nan) {
+            calcStochasticForces();
+            //cout << "NaN found" << endl;
+        }
+    }
 
 	// Update particle position
 	for (int i = 0; i < 3; i++){
@@ -580,7 +588,7 @@ void CConfiguration::calcTracerMobilityMatrix(bool full){
 	}
 	// Add lubrication Part to tracer Resistance Matrix and invert	
     _RMLub = _resMNoLub + lubM;
-	_tracerMM = CholInvertPart(_RMLub);
+	_tracerMM = invert3x3(_RMLub);
     // cout << "tracerMM\n" << _tracerMM << endl;
 //     cout << "inv(tracerMM)\n" << CholInvertPart(_tracerMM) << endl;
 //     cout << "_RMLub\n" << _RMLub << endl;
@@ -775,6 +783,29 @@ Matrix3d CConfiguration::CholInvertPart (const MatrixXd A) {
     // perform inversion by cholesky decompoposition and return upper left 3x3 block
     return A.ldlt().solve(I).block<3,3>(0,0);
 }
+
+Matrix3d CConfiguration::invert3x3 (const Matrix3d A) { 
+    //analytical 3x3 matrix inversion - source wikipedia / stackoverflow
+    Matrix3d result;
+    
+    double determinant =    +A(0,0)*(A(1,1)*A(2,2)-A(2,1)*A(1,2))
+                            -A(0,1)*(A(1,0)*A(2,2)-A(1,2)*A(2,0))
+                            +A(0,2)*(A(1,0)*A(2,1)-A(1,1)*A(2,0));
+    double invdet = 1/determinant;
+    result(0,0) =  (A(1,1)*A(2,2)-A(2,1)*A(1,2))*invdet;
+    result(0,1) = -(A(0,1)*A(2,2)-A(0,2)*A(2,1))*invdet;
+    result(0,2) =  (A(0,1)*A(1,2)-A(0,2)*A(1,1))*invdet;
+    result(1,0) = -(A(1,0)*A(2,2)-A(1,2)*A(2,0))*invdet;
+    result(1,1) =  (A(0,0)*A(2,2)-A(0,2)*A(2,0))*invdet;
+    result(1,2) = -(A(0,0)*A(1,2)-A(1,0)*A(0,2))*invdet;
+    result(2,0) =  (A(1,0)*A(2,1)-A(2,0)*A(1,1))*invdet;
+    result(2,1) = -(A(0,0)*A(2,1)-A(2,0)*A(0,1))*invdet;
+    result(2,2) =  (A(0,0)*A(1,1)-A(1,0)*A(0,1))*invdet;
+
+    return result;
+}
+
+
 
 
 //****************************POS HISTOGRAM****************************************************//

@@ -115,6 +115,7 @@ private:
 	Eigen::Matrix3d RotnePrager(const double & r, const double & rsq, const Eigen::Vector3d & rij);
 	void initConstMobilityMatrix();
 	Eigen::Matrix3d CholInvertPart (const Eigen::MatrixXd A);
+    Eigen::Matrix3d invert3x3 (const Eigen::Matrix3d A);
 	Eigen::Matrix3d realSpcSm( const Eigen::Vector3d & rij, const bool self, const double asq );
 	Eigen::Matrix3d reciprocalSpcSm( const Eigen::Vector3d & rij, const double asq );
 	Eigen::Matrix3d realSpcM(const double & rsq, const Eigen::Vector3d & rij, const double asq);
