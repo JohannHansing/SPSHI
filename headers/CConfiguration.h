@@ -19,6 +19,7 @@
 
 
 #include "CPolymers.h"
+#include "CPolySphere.h"
 
 
 class CConfiguration {
@@ -58,20 +59,20 @@ private:
     int _entryside[3];            //records through which side and in which direction the particle last entered a box. For the face of the cube in the x-z
                                             //plane at y=0, it is entryside[0] = 1, in the x-y plane at z=L it is entryside[1] = -1!
     double _resetpos;
-    double _startpos[3];          //Stores where the particle starting position was. This is needed to calculate the mean square displacement
-    double _prevpos[3];           //Stores previous particle position before particle is moved.
+    Eigen::Vector3d _startpos;          //Stores where the particle starting position was. This is needed to calculate the mean square displacement
+    Eigen::Vector3d _prevpos;           //Stores previous particle position before particle is moved.
     std::vector<std::vector<std::vector<int> > > _posHistoM;
 
     int _min, _max;        // parameters for determining up to which order neighboring rods are considered for the potential
 
     //Particle parameters
-    double _ppos[3];    //initialize particle position (DO IT LIKE resetpos FOR MOVEPARTICLEFOLLOW/RESET)
+    Eigen::Vector3d _ppos;    //initialize particle position (DO IT LIKE resetpos FOR MOVEPARTICLEFOLLOW/RESET)
     double _upot;
-    double _f_mob[3];   //store mobility and stochastic force
+    Eigen::Vector3d _f_mob;   //store mobility and stochastic force
     Eigen::Vector3d _f_sto;
 	
 	//HI Paramters
-	std::vector<std::array<double, 3> > _epos;
+	std::vector<CPolySphere> _polySpheres;
 	Eigen::MatrixXd _mobilityMatrix;
 	Eigen::Matrix3d _tracerMM;     
 	Eigen::Matrix3d _resMNoLub;
@@ -82,6 +83,7 @@ private:
     double _lastcheck[3];
     double _cutoffMMsq;
     double _stericrSq;
+    int _n_cellsAlongb;
     
 	
 	

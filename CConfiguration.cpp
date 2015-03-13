@@ -1,7 +1,5 @@
 #include "headers/CConfiguration.h"
 #include <boost/timer.hpp>
-#include <Eigen/Dense>
-#include <Eigen/Cholesky>
 
 
 using namespace Eigen;
@@ -34,19 +32,20 @@ CConfiguration::CConfiguration(
     _poly = CPolymers();
     _hpi = hpi;
     _upot = 0;
+    _f_mob = Vector3d::Zero();
+    _f_sto = Vector3d::Zero();
     _mu_sto = sqrt( 2 * _timestep );                 //timestep for stochastic force
-	_f_sto.resize(3);
 	_hpi = hpi; 
 	_hpi_u = hpi_u;
 	_hpi_k = hpi_k;
     for (int i = 0; i < 3; i++){
-        _ppos[i] = _resetpos;
-        _startpos[i] = _resetpos;
+        _ppos(i) = _resetpos;
+        _startpos(i) = _resetpos;
         _entryside[i] = 0;
         _wallcrossings[i] = 0;
         _boxnumberXYZ[i] = 0;
-        _prevpos[i] = _resetpos;
-        _lastcheck[i] = _startpos[i];
+        _prevpos(i) = _resetpos;
+        _lastcheck[i] = _startpos(i);
     }
     
     
@@ -86,15 +85,16 @@ CConfiguration::CConfiguration(
 	// init HI vectors matrices, etc
     _V = pow( _boxsize, 3);
     _cutoffMMsq = pow(0.05*_boxsize,2);
+    _n_cellsAlongb = 5;
     if (polymersize != 0) _HI = true;
 	if (_HI) {
-		_edgeParticles = (int) (_boxsize/polymersize + 0.001);
-		_epos.resize(3 * _edgeParticles - 2);
+		_edgeParticles = (int) ( ( _boxsize/_n_cellsAlongb )/polymersize + 0.001);
 		_LJPot = false;
         // THIS NEEDS TO COME LAST !!!!!!!
 		initConstMobilityMatrix();
 		calcTracerMobilityMatrix(true);
 	}
+
 
 }
 
@@ -102,21 +102,21 @@ void CConfiguration::updateStartpos(){
     //This function is used if the particle should keep moving after each run, and not start at _resetpos again, like in the first run
     //This (hopefully) will give better averages without having to spend a lot of steps in the beginning of each run to get away from _resetpos
     for (int i = 0; i < 3; i++){
-    _startpos[i] = _ppos[i] + _boxsize * _boxnumberXYZ[i];
+    _startpos(i) = _ppos(i) + _boxsize * _boxnumberXYZ[i];
     }
 }
 
 void CConfiguration::checkDisplacementforMM(){
     double movedsq = 0;
     for (int i=0; i<3; i++){
-        movedsq += pow(_ppos[i] + _boxsize *  _boxnumberXYZ[i] - _lastcheck[i] , 2);
+        movedsq += pow(_ppos(i) + _boxsize *  _boxnumberXYZ[i] - _lastcheck[i] , 2);
     }
     if ( movedsq > _cutoffMMsq ){  
         calcTracerMobilityMatrix(true);
 		// new start point for displacement check
-        _lastcheck[0] = _ppos[0] + _boxsize *  _boxnumberXYZ[0];
-        _lastcheck[1] = _ppos[1] + _boxsize *  _boxnumberXYZ[1];
-        _lastcheck[2] = _ppos[2] + _boxsize *  _boxnumberXYZ[2];
+        _lastcheck[0] = _ppos(0) + _boxsize *  _boxnumberXYZ[0];
+        _lastcheck[1] = _ppos(1) + _boxsize *  _boxnumberXYZ[1];
+        _lastcheck[2] = _ppos(2) + _boxsize *  _boxnumberXYZ[2];
     }
 	else calcTracerMobilityMatrix(false);
 
@@ -124,20 +124,16 @@ void CConfiguration::checkDisplacementforMM(){
 
 Vector3d CConfiguration::midpointScheme(Vector3d V0dt, Vector3d F){
     // Implementation of midpoint scheme according to Banchio2003
-    double ppos_prime[3];
+    Vector3d ppos_prime;
     int n = 200;
-    for (int i = 0; i<3; i++){
-        ppos_prime[i] = _ppos[i] + V0dt(i) / n;
-    }
-    
-	Vector3d vec_rij(3);
+    ppos_prime = _ppos + V0dt / n;
+
+	Vector3d vec_rij;
 	Matrix3d lubM = Matrix3d::Zero(); 
 	
 // loop over tracer - particle mobility matrix elements
 	for (unsigned int j = 0; j < 3 * _edgeParticles - 2; j++){
-		vec_rij(0) = ppos_prime[0] - _epos[j][0];
-		vec_rij(1) = ppos_prime[1] - _epos[j][1];
-		vec_rij(2) = ppos_prime[2] - _epos[j][2];
+		vec_rij = ppos_prime - _polySpheres[j].getPosition();
 		lubM += lubricate(vec_rij);
 	}
 	//cout << "############# _mobilityMatrix #########\n" << _mobilityMatrix << endl;
@@ -162,17 +158,13 @@ void CConfiguration::makeStep(){
     Vector3d Vdriftdt = Vector3d::Zero();
     Vector3d V0dt = Vector3d::Zero();
 
-    Vector3d F;
-    for (int i = 0; i < 3; i++){
-        F(i) = _f_mob[i];
-        _prevpos[i] = _ppos[i];
-    }
+    _prevpos = _ppos;
 
     bool v_nan = true;
     while (v_nan){  // This loop repeats until the the midpoint scheme does not result in a NaN anymore!
-        V0dt = _tracerMM * (F * _timestep + _f_sto * _mu_sto);
+        V0dt = _tracerMM * (_f_mob * _timestep + _f_sto * _mu_sto);
 
-        if (_HI && !_noLub) Vdriftdt = midpointScheme(V0dt, F);   //TODO  Enable mid-point-scheme / backflow
+        if (_HI && !_noLub) Vdriftdt = midpointScheme(V0dt, _f_mob);   //TODO  Enable mid-point-scheme / backflow
         v_nan = std::isnan(Vdriftdt(0));
         if (v_nan) {
             calcStochasticForces();
@@ -181,15 +173,13 @@ void CConfiguration::makeStep(){
     }
 
 	// Update particle position
-	for (int i = 0; i < 3; i++){
-	    _ppos[i] += V0dt(i) + Vdriftdt(i);
-	}
-		
+	_ppos += V0dt + Vdriftdt;
+
 /*	}
 	else{
 	    for (int i = 0; i < 3; i++){
-	        _prevpos[i] = _ppos[i];
-	        _ppos[i] += _timestep * _f_mob[i] + _mu_sto * _f_sto[i];
+	        _prevpos(i) = _ppos(i);
+	        _ppos(i) += _timestep * _f_mob(i) + _mu_sto * _f_sto[i];
 	    }
 	}
   */  
@@ -198,15 +188,15 @@ void CConfiguration::makeStep(){
 void CConfiguration::checkBoxCrossing(){
     //should the particle cross the confinement of the cube, let it appear on the opposite side of the box
     for (int i = 0; i < 3; i++){
-        if (_ppos[i] < 0){
-            _ppos[i] += _boxsize;
+        if (_ppos(i) < 0){
+            _ppos(i) += _boxsize;
             _boxnumberXYZ[i] -= 1;
             countWallCrossing(i, -1);
             if (_ranU) _poly.shiftPolySign(i, -1);
 
         }
-        else if (_ppos[i] > _boxsize){
-            _ppos[i] -= _boxsize;
+        else if (_ppos(i) > _boxsize){
+            _ppos(i) -= _boxsize;
             _boxnumberXYZ[i] += 1;
             countWallCrossing(i, 1);
             if (_ranU) _poly.shiftPolySign(i, 1);
@@ -271,9 +261,7 @@ void CConfiguration::calcMobilityForces(){
         z2 = _boxsize - z1;   //z is in cylindrical coordinates. This indicates above/below which value the exp potential is modifed for random signs.
     }
     //reset mobility forces to zero
-    for (int l = 0; l < 3; l++) {
-        _f_mob[l] = 0;
-    }
+    _f_mob = Vector3d::Zero();
     const double r_c = _6root2 * _pradius;    //cutoff for Lennard-Jones calculation (at minimum)
 
     for (int i = 0; i < 3; i++){
@@ -283,8 +271,8 @@ void CConfiguration::calcMobilityForces(){
         int n = 0;     // reset counter for index of next rod in plane  n = 0, 1, 2, 3 -> only needed for ranPot
         for (int nk = _min; nk < _max; nk++){
             for (int ni = _min; ni < _max; ni++){
-            r_i = _ppos[i] - ni*_boxsize;
-            r_k = _ppos[k] - nk*_boxsize;
+            r_i = _ppos(i) - ni*_boxsize;
+            r_k = _ppos(k) - nk*_boxsize;
             //this is needed if we dont want the rods to cross each other to create a strong potential well
             if (plane == 0){
                 r_i -= _rodDistance;
@@ -303,16 +291,16 @@ void CConfiguration::calcMobilityForces(){
             if (_ranU){
                 utmp = utmp * _poly.get_sign(plane, n);
                 frtmp = frtmp * _poly.get_sign(plane, n);
-                if (_ppos[plane] > z2){
+                if (_ppos(plane) > z2){
                     if (! _poly.samesign(1, plane, n)){
-                        _f_mob[plane] += utmp * 4 / _boxsize;              //this takes care of the derivative of the potential modification and resulting force
-                        modifyPot(utmp, frtmp, _boxsize - _ppos[plane]);
+                        _f_mob(plane) += utmp * 4 / _boxsize;              //this takes care of the derivative of the potential modification and resulting force
+                        modifyPot(utmp, frtmp, _boxsize - _ppos(plane));
                     }
                 }
-                else if (_ppos[plane] < z1){
+                else if (_ppos(plane) < z1){
                     if (! _poly.samesign(-1, plane, n)){
-                        _f_mob[plane] -= utmp * 4 / _boxsize;              //this takes care of the derivative of the potential modification and resulting force
-                        modifyPot(utmp, frtmp, _ppos[plane]);
+                        _f_mob(plane) -= utmp * 4 / _boxsize;              //this takes care of the derivative of the potential modification and resulting force
+                        modifyPot(utmp, frtmp, _ppos(plane));
                     }
                 }
                 n++;  //index of next rod in curent plane
@@ -323,8 +311,8 @@ void CConfiguration::calcMobilityForces(){
 
 
             Epot += utmp;
-            _f_mob[i] += frtmp * r_i;
-            _f_mob[k] += frtmp * r_k;
+            _f_mob(i) += frtmp * r_i;
+            _f_mob(k) += frtmp * r_k;
             }
         }
     }
@@ -341,8 +329,8 @@ void CConfiguration::saveXYZTraj(string name, const int& move, string a_w){
     fprintf(f, "%d\n%s (%8.3f %8.3f %8.3f) t=%d \n", 1, "sim_name", _boxsize, _boxsize, _boxsize, move);
 
     // polymer particles
-    fprintf(f, "%3s%9.3f%9.3f%9.3f \n","H", _ppos[0]+ _boxsize *_boxnumberXYZ[0], _ppos[1]+ _boxsize *_boxnumberXYZ[1], _ppos[2]+ _boxsize *_boxnumberXYZ[2]);   // absolute position
-	// fprintf(f, "%3s%9.3f%9.3f%9.3f \n","H", _ppos[0], _ppos[1], _ppos[2]);  // relative position in box
+    fprintf(f, "%3s%9.3f%9.3f%9.3f \n","H", _ppos(0)+ _boxsize *_boxnumberXYZ[0], _ppos(1)+ _boxsize *_boxnumberXYZ[1], _ppos(2)+ _boxsize *_boxnumberXYZ[2]);   // absolute position
+	// fprintf(f, "%3s%9.3f%9.3f%9.3f \n","H", _ppos(0), _ppos(1), _ppos(2));  // relative position in box
     fclose(f);
 }
 
@@ -364,14 +352,14 @@ double CConfiguration::getPosVariance(){
     //function to return the variance, to save it as an instant value
     double var = 0;
     for (int m = 0; m < 3; m++){                    //calculate (r_m - r_0)^2|_i
-        var += pow((_ppos[m] + _boxsize *_boxnumberXYZ[m] - _startpos[m]) , 2);
+        var += pow((_ppos(m) + _boxsize *_boxnumberXYZ[m] - _startpos(m)) , 2);
     }
     return var;
 }
 
 double CConfiguration::get1DPosVariance(int dim){
     //function to return the variance of just one dimension x = 0, y  = 1 or z = 2
-    return pow((_ppos[dim] + _boxsize *_boxnumberXYZ[dim] - _startpos[dim]) , 2);
+    return pow((_ppos(dim) + _boxsize *_boxnumberXYZ[dim] - _startpos(dim)) , 2);
 }
 
 
@@ -380,7 +368,7 @@ double CConfiguration::get1DPosVariance(int dim){
 bool CConfiguration::checkFirstPassage(double mfpPos, int dim){    //TODO
     //function returns true if in the last step the momentary "way point" (_mfpIndex * xinterval) has been crossed in dim-direction
     // where dim = 0, 1, 2 -> x, y, z. Otherwise it returns false
-    if ((_ppos[dim] + _boxsize*_boxnumberXYZ[dim] - _startpos[dim]) > (mfpPos) ) return true;
+    if ((_ppos(dim) + _boxsize*_boxnumberXYZ[dim] - _startpos(dim)) > (mfpPos) ) return true;
     else return false;
 }
 
@@ -388,7 +376,7 @@ bool CConfiguration::checkFirstPassage(double mfpPos, int dim){    //TODO
 
 void CConfiguration::moveBack(){
     //moves particle back to previous position
-    for (int i = 0; i < 3; i++) {_ppos[i] = _prevpos[i];}
+    _ppos = _prevpos;
 }
 //****************************POTENTIALS**********************************************************
 
@@ -436,25 +424,43 @@ bool CConfiguration::testOverlap(){
     //Function to check, whether the diffusing particle of size psize is overlapping with any one of the rods (edges of the box)
     //mostly borrowed from moveParticleAndWatch()
     bool overlaps = false;
+
+    // for (unsigned int i=0; i < _polySpheres.size(); i++ ){
+//         // First update tracer position in Polysphere class instances to
+//         _polySpheres[i].updateTracerVec( _ppos );
+//         if ( _polySpheres[i].getTracerdistsq() <= _stericrSq ){
+//             overlaps=true;
+//             continue;
+//         }
+//     }
+//     return overlaps;
+
+    // KEEP THIS TO MAYBE IMPLEMENT MORE EFFICIENT testOVERLAP
+    // --> store cell of tracerparticle and adjust to L1 and L2
+
     double r_i = 0, r_k = 0;
     double r_sq = 0;
-    double L1[] = {0, _boxsize, 0, _boxsize};  //these two arrays are only needed for the iteration.
-    double L2[] = {0, 0, _boxsize, _boxsize};
+    double L1[] = {0, _boxsize/_n_cellsAlongb, 0, _boxsize/_n_cellsAlongb};  //these two arrays are only needed for the iteration.
+    double L2[] = {0, 0, _boxsize/_n_cellsAlongb, _boxsize/_n_cellsAlongb};
+    double cellwidth = _boxsize/_n_cellsAlongb;
 
     for (int i = 0; i < 2; i++){
         for (int k = i+1; k < 3; k++){
-            for (int n = 0; n < 4; n++){
-                r_i = _ppos[i] - L1[n];
-                r_k = _ppos[k] - L2[n];
-                //this is needed if we dont want the rods to cross each other to create a strong potential well
-                if (k == 2){
-                    r_i -= _rodDistance;
-                    if (i == 0) r_k -= _rodDistance;
-                }
-                r_sq = r_i * r_i + r_k * r_k; //distance to the rods
-                if (r_sq <= _stericrSq){
-                    overlaps = true;
-                    continue;
+            for (int n_i = 0; n_i <= _n_cellsAlongb; n_i++ ){
+                r_i = _ppos(i) - cellwidth * n_i;
+                
+                for (int n_k = 0; n_k <= _n_cellsAlongb; n_k++ ){
+                    r_k = _ppos(k) - cellwidth * n_k;
+                    //this is needed if we dont want the rods to cross each other to create a strong potential well
+                    if (k == 2){
+                        r_i -= _rodDistance;
+                        if (i == 0) r_k -= _rodDistance;
+                    }
+                    r_sq = r_i * r_i + r_k * r_k; //distance to the rods
+                    if (r_sq <= _stericrSq){
+                        overlaps = true;
+                        return overlaps;
+                    }
                 }
             }
             if (overlaps == true) continue;
@@ -479,23 +485,35 @@ void CConfiguration::initConstMobilityMatrix(){
 	double rij = 0.0, rijsq = 0.0;
 	const double asq = _polyrad * _polyrad;
 	
-	// create mobility matrix - Some elements remain constant throughout the simulation. Those are stored here.
-	int size = 3 * (3 * _edgeParticles - 1);
-	_mobilityMatrix = MatrixXd::Identity(size,size);
-		
-	// set _edgeParticles positions _pos to zero
-	for (int i = 0; i < 3 * _edgeParticles - 2; i++){
-	    _epos[i].fill(0);
-	}
 	
 	// store the edgeParticle positions, so that I can simply loop through them later
+    std::vector<Vector3d> zeroPos( 3 * _edgeParticles - 2 , Vector3d::Zero() );
+    Vector3d nvec;
+    double offset = (_boxsize/_n_cellsAlongb - 2 * _polyrad * _edgeParticles)/_edgeParticles;
+	// store the edgeParticle positions in first cell in zeroPos
 	for (int i = 1; i < _edgeParticles; i++){
-		double tmp = i * 2 * _polyrad;
-		_epos[i][0] = tmp;
-		_epos[i + (_edgeParticles - 1)][1] = tmp;  
-		_epos[i + 2 * (_edgeParticles - 1)][2] = tmp;
+		double tmp = i * (_boxsize/_n_cellsAlongb) / _edgeParticles;
+		zeroPos[i](0) = tmp;
+		zeroPos[i + (_edgeParticles - 1)](1) = tmp;  
+		zeroPos[i + 2 * (_edgeParticles - 1)](2) = tmp;
+	}
+	for (int nx=0; nx < _n_cellsAlongb; nx++){
+	    for (int ny=0; ny < _n_cellsAlongb; ny++){
+            for (int nz=0; nz < _n_cellsAlongb; nz++){
+                nvec << nx, ny, nz; // Position of 0 corner of the simulation box
+                for (unsigned int i = 0; i < zeroPos.size(); i++){
+            		double tmp = i * 2 * _polyrad;
+                    _polySpheres.push_back( CPolySphere( zeroPos[i] + nvec * _boxsize/_n_cellsAlongb, _startpos ) );
+            	}
+            }
+        }
 	}
     
+
+	// create mobility matrix - Some elements remain constant throughout the simulation. Those are stored here.
+	_mobilityMatrix = MatrixXd::Identity( 3 * (_polySpheres.size() + 1) , 3 * (_polySpheres.size() + 1) );
+     
+
     // Eigen-vector for interparticle distance. Needs to initialized as zero vector for self mobilities.
 	Vector3d vec_rij = Vector3d::Zero();
 	
@@ -512,26 +530,23 @@ void CConfiguration::initConstMobilityMatrix(){
 	selfmob(0,0) += self_plus;
 	selfmob(1,1) += self_plus;
 	selfmob(2,2) += self_plus;
-		
-	for (unsigned int i = 1; i < 3 * _edgeParticles - 1 ; i++) {
+
+
+	for (unsigned int i = 1; i < _polySpheres.size() + 1 ; i++) {
 		unsigned int i_count = 3 * i;
 		/*_mobilityMatrix(0,0) = 1;  already taken care of due to identity matrix. The extra F_i0 part in the Ewald sum is only correction to reciprocal sum.
 		 * I leave out the reciprocal summation for the tracer particle self diff, because it is in only in the simulation box unit cell. */
-				
+
 		_mobilityMatrix.block<3,3>(i_count,i_count) = selfmob;
 	}
-	
+
+
 	// The mobility matrix elements for the interacting edgeParticles are stored here, since they do not change position
-	for (unsigned int i = 0; i < 3 * _edgeParticles - 2; i++){
-		rxi = _epos[i][0];
-		ryi = _epos[i][1];
-		rzi = _epos[i][2];
+	for (unsigned int i = 0; i < _polySpheres.size(); i++){
 		unsigned int i_count = 3 * (i + 1);       // plus 1 is necessary due to omitted tracer particle
 		
-		for (unsigned int j = i + 1; j < 3 * _edgeParticles - 2; j++) {
-			vec_rij(0) = rxi - _epos[j][0];
-			vec_rij(1) = ryi - _epos[j][1];
-			vec_rij(2) = rzi - _epos[j][2];
+		for (unsigned int j = i + 1; j < _polySpheres.size(); j++) {
+			vec_rij = _polySpheres[i].getPosition() - _polySpheres[j].getPosition();
 			unsigned int  j_count = 3 * (j + 1);    // plus 1 is necessary due to omitted tracer particle
 		
 		/*
@@ -562,9 +577,7 @@ void CConfiguration::calcTracerMobilityMatrix(bool full){
 	
 // loop over tracer - particle mobility matrix elements
 	for (unsigned int j = 0; j < 3 * _edgeParticles - 2; j++){
-		vec_rij(0) = _ppos[0] - _epos[j][0];
-		vec_rij(1) = _ppos[1] - _epos[j][1];
-		vec_rij(2) = _ppos[2] - _epos[j][2];
+        vec_rij = _ppos - _polySpheres[j].getPosition();
 		
 		if (full){
 		    // Calculation of different particle width Rotne-Prager Ewald sum 
@@ -602,7 +615,7 @@ void CConfiguration::calcTracerMobilityMatrix(bool full){
 //     cout << "******************************" << endl;
     //cout << "$$$$$$$ lubM $$$$$$$$$\n" << lubM << endl;
     //cout << "############# _tracerMM #########\n" << _tracerMM << endl;
-    //cout << _ppos[0] << " " << _ppos[1] << " "<< _ppos[2] << endl;
+    //cout << _ppos(0) << " " << _ppos(1) << " "<< _ppos(2) << endl;
 }
 
 
@@ -822,12 +835,12 @@ void CConfiguration::initPosHisto(){
 
 void CConfiguration::addHistoValue(){
     //adds a value to the position histogram
-    int x = _ppos[0] / _boxsize * 100;     //CAREFUL: THIS CAN'T BE DONE AT A POINT WHERE X MIGHT BE ZERO!!!
-    int y = _ppos[1] / _boxsize * 100;
-    int z = _ppos[2] / _boxsize * 100;
+    int x = _ppos(0) / _boxsize * 100;     //CAREFUL: THIS CAN'T BE DONE AT A POINT WHERE X MIGHT BE ZERO!!!
+    int y = _ppos(1) / _boxsize * 100;
+    int z = _ppos(2) / _boxsize * 100;
     if ((x < 0) || (y < 0) || (z < 0) || (x > 99) || (y > 99) || (z > 99)){
-        cout << "The Position Histogram function 'conf.addHisto()' is in a bad place, since there is a negative position _ppos[]" << endl;
-        cout << "The current position is: " << _ppos[0] << " " << _ppos[1] << " " << _ppos[2] << endl;
+        cout << "The Position Histogram function 'conf.addHisto()' is in a bad place, since there is a negative position _ppos()" << endl;
+        cout << "The current position is: " << _ppos(0) << " " << _ppos(1) << " " << _ppos(2) << endl;
     }
     _posHistoM[x][y][z] += 1;
 }
@@ -860,7 +873,7 @@ void CConfiguration::printHistoMatrix(string folder){
 std::vector<double> CConfiguration::getppos(){ // returns pointer to current particle position array
 	std::vector<double> pos (3);
 	for (int i = 0; i < 3; i++){
-		pos[i] = _ppos[i] + _boxsize * _boxnumberXYZ[i];
+		pos[i] = _ppos(i) + _boxsize * _boxnumberXYZ[i];
 	}
 	return pos;
 }
@@ -874,7 +887,7 @@ std::vector<double> CConfiguration::getppos(){ // returns pointer to current par
 double CConfiguration::getDisplacement(){
    FAULTY, _f_mob is now a ublas::vector !!!!  double d = 0;
     for (int i = 0; i < 3; i++){
-        d += pow((_timestep * _f_mob[i] + _mu_sto * _f_sto[i]), 2);
+        d += pow((_timestep * _f_mob(i) + _mu_sto * _f_sto[i]), 2);
     }
     return sqrt(d); 
 } */
@@ -888,8 +901,8 @@ void CConfiguration::resetposition(){
 	    for (int i = 0; i < 3; i++){
 	        _entryside[i] = 0;
 			double ranPos = zeroone();
-	        _startpos[i] = ranPos;
-	        _ppos[i] = ranPos;
+	        _startpos(i) = ranPos;
+	        _ppos(i) = ranPos;
 	        _boxnumberXYZ[i] = 0;
 	    }
 		overlap = testOverlap();
@@ -938,7 +951,7 @@ void CConfiguration::calcMobilityForces(){
     }
     //reset mobility forces to zero
     for (int l = 0; l < 3; l++) {
-        _f_mob[l] = 0;
+        _f_mob(l) = 0;
     }
     const double r_c = _6root2 * _pradius;    //cutoff for Lennard-Jones calculation (at minimum)
 
@@ -947,8 +960,8 @@ void CConfiguration::calcMobilityForces(){
             if ( k == 3 ) k = 0;
             int plane = 3 - (i+k); //this is the current plane of the cylindrical coordinates
             for (int n = 0; n < 4; n++){
-                r_i = _ppos[i] - L1[n];
-                r_k = _ppos[k] - L2[n];
+                r_i = _ppos(i) - L1[n];
+                r_k = _ppos(k) - L2[n];
                 //this is needed if we dont want the rods to cross each other to create a strong potential well
                 if (plane == 0){
                     r_i -= _rodDistance;
@@ -967,16 +980,16 @@ void CConfiguration::calcMobilityForces(){
                 if (_ranU){
                     utmp = utmp * _poly.get_sign(plane, n);
                     frtmp = frtmp * _poly.get_sign(plane, n);
-                    if (_ppos[plane] > z2){
+                    if (_ppos(plane) > z2){
                         if (! _poly.samesign(1, plane, n)){
-                            modifyPot(utmp, frtmp, _boxsize - _ppos[plane]);
-                            _f_mob[plane] += utmp * 4 / _boxsize;              //this takes care of the derivative of the potential modification and resulting force
+                            modifyPot(utmp, frtmp, _boxsize - _ppos(plane));
+                            _f_mob(plane) += utmp * 4 / _boxsize;              //this takes care of the derivative of the potential modification and resulting force
                         }
                     }
-                    else if (_ppos[plane] < z1){
+                    else if (_ppos(plane) < z1){
                         if (! _poly.samesign(-1, plane, n)){
-                            modifyPot(utmp, frtmp, _ppos[plane]);
-                            _f_mob[plane] -= utmp * 4 / _boxsize;              //this takes care of the derivative of the potential modification and resulting force
+                            modifyPot(utmp, frtmp, _ppos(plane));
+                            _f_mob(plane) -= utmp * 4 / _boxsize;              //this takes care of the derivative of the potential modification and resulting force
                         }
                     }
                 }
@@ -986,8 +999,8 @@ void CConfiguration::calcMobilityForces(){
 
 
                 Epot += utmp;
-                _f_mob[i] += frtmp * r_i;
-                _f_mob[k] += frtmp * r_k;
+                _f_mob(i) += frtmp * r_i;
+                _f_mob(k) += frtmp * r_k;
             }
 
     }
@@ -1003,7 +1016,7 @@ void CConfiguration::calcMobilityForces(){
     double Epot = 0;
     //reset mobility forces to zero
     for (int l = 0; l < 3; l++) {
-        _f_mob[l] = 0;
+        _f_mob(l) = 0;
     }
     const double r_c = _6root2 * _pradius;    //cutoff for Lennard-Jones calculation (at minimum)
 
@@ -1013,8 +1026,8 @@ void CConfiguration::calcMobilityForces(){
             int plane = 3 - (i+k); //this is the current plane of the cylindrical coordinates
             for (int ni = -1; ni < 3; ni++){
                 for (int nk = -1; nk < 3; nk++){
-                r_i = _ppos[i] - ni*_boxsize;
-                r_k = _ppos[k] - nk*_boxsize;
+                r_i = _ppos(i) - ni*_boxsize;
+                r_k = _ppos(k) - nk*_boxsize;
 
                 r_abs = sqrt(r_i * r_i + r_k * r_k); //distance to the rods
 
@@ -1027,8 +1040,8 @@ void CConfiguration::calcMobilityForces(){
 
 
                 Epot += utmp;
-                _f_mob[i] += frtmp * r_i;
-                _f_mob[k] += frtmp * r_k;
+                _f_mob(i) += frtmp * r_i;
+                _f_mob(k) += frtmp * r_k;
                 }
             }
 
