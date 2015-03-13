@@ -24,11 +24,11 @@ using namespace std;
 string createDataFolder(
         bool respos, double dt, double simtime, double potRange, double potStrength, double boxsize,
         double particlesize, double rDist, bool ewaldCorr, bool steric, bool randomPot, bool hpi, double hpi_u, double hpi_k, double polymersize, bool noLub);
-void settingsFile(
+void parameterFile(
         string folder, bool respos, double particlesize, double boxsize, double timestep, double runs, double steps,
         double potStrength, double potRange, double rDist, bool ewaldCorr, bool recordMFP, bool steric, bool randomPot, bool hpi, double hpi_u,
-		double hpi_k, double polymersize, double executiontime, bool noLub);
-
+		double hpi_k, double polymersize, bool noLub);
+void parameterFileAppend(string folder, double executiontime);
 
 template<typename T>
 string toString(const T& value);
@@ -53,7 +53,7 @@ int main(int argc, const char* argv[]){
     //TRIGGERS:
     bool writeTrajectory = (strcmp(argv[1] , "true") == 0 ) ;    // relative position TODO
     bool resetPos = (strcmp(argv[2] , "true") == 0 ) ;
-    bool ewaldCorr = (strcmp(argv[3] , "true") == 0 ) ;       //BESSEL TODO
+    bool ewaldCorr = (strcmp(argv[3] , "true") == 0 ) ;
     bool recordMFP = (strcmp(argv[4] , "true") == 0 ) ;
     bool noLub = (strcmp(argv[5] , "true") == 0 ) ;
     bool includeSteric = (strcmp(argv[6] , "true") == 0 ) ;  // steric 2
@@ -149,7 +149,16 @@ int main(int argc, const char* argv[]){
     unsigned int stepcount = 0;
     ofstream trajectoryfile;
     trajectoryfile.open((folder + "/Coordinates/trajectory.txt").c_str());
+
+    // Write parameter file parameters.txt
+    parameterFile(folder, resetPos, particlesize, boxsize, timestep, runs, steps, ustrength, urange, rodDist, 
+	ewaldCorr, recordMFP, includeSteric, ranPot ,hpi, hpi_u, hpi_k, polymersize, noLub);
     
+    if (conf.testOverlap()){
+        cout << "ERROR !!!!!!!!!!!!!!!!\nThere is an OVERLAP between the polymer network and the particle start position!" << endl;
+        return 0;
+    }
+
 // **************START OF RUNS-LOOP
     for (int l = 0; l<runs; l++){
 
@@ -174,7 +183,7 @@ int main(int argc, const char* argv[]){
             conf.calcStochasticForces();
 
 
-            conf.calcMobilityForces();
+            if (ustrength != 0) conf.calcMobilityForces();
 
 
             if (((i+1)%100 == 0) && (l == 0) && writeTrajectory){       //Save the first trajectory to file
@@ -233,6 +242,7 @@ int main(int argc, const char* argv[]){
                 trajectoryfile << fixed << stepcount * timestep << "\t" << ppos[0] << " " << ppos[1] << " " << ppos[2] << endl;
             }
             //if (((i % 5) == 0) && recordPosHisto) conf.addHistoValue();
+            
         }
     }//----------END OF RUNS-LOOP
 
@@ -261,14 +271,12 @@ int main(int argc, const char* argv[]){
 	end = clock();
 	double runtime = (double)((end-start)/(CLOCKS_PER_SEC));
 	cout << runtime << " seconds runtime." << endl;
-	
-	//If settingsFile is saved, then the simulation was successfull
-    settingsFile(folder, resetPos, particlesize, boxsize, timestep, runs, steps, ustrength, urange, rodDist, 
-	ewaldCorr, recordMFP, includeSteric, ranPot ,hpi, hpi_u, hpi_k, polymersize, (runtime/3600), noLub);
-	
+
+    parameterFileAppend(folder, runtime);
+
 	trajectoryfile.close();
-	
-	
+
+
     return 0;
 }
 
@@ -292,7 +300,7 @@ string createDataFolder(bool resetpos, double timestep, double simtime, double p
     sprintf(range, "%.3f", potRange);
     //In the definition of folder, the addition has to START WITH A STRING! for the compiler to know what to do (left to right).
     string folder = "sim_data";
-    if (!resetpos) folder = folder + "/noreset/backflow";
+    if (!resetpos) folder = folder + "/noreset/CHECKCELLPARAMETERn";
     if (ewaldCorr) folder = folder +  "/ewaldCorr";
     if (noLub) folder = folder +  "/noLub";
     if (randomPot) folder = folder + "/ranPot";
@@ -314,36 +322,53 @@ string createDataFolder(bool resetpos, double timestep, double simtime, double p
 }
 
 
-void settingsFile(string folder, bool resetpos, double particlesize, double boxsize, double timestep, double runs, double steps, 
+void parameterFile(string folder, bool resetpos, double particlesize, double boxsize, double timestep, double runs, double steps, 
     double potStrength, double potRange, double rDist, bool ewaldCorr, bool recordMFP, bool steric, bool randomPot, bool hpi, double hpi_u, double hpi_k, 
-	double polymersize, double executiontime, bool noLub){
+	double polymersize, bool noLub){
     //Creates a file where the simulation settings are stored
-    //MAYBE ALSO INCLUDE TIME AND DATE!!
-    ofstream settingsfile;
-    settingsfile.open((folder + "/sim_Settings.txt").c_str());
-    settingsfile << "Time required for execution: "
-    << executiontime 
-    << " hours." << "\n\n";
-    settingsfile << "Sim dir: " << folder << endl;
-    settingsfile << "ResetPos " << resetpos << endl;
-    settingsfile << "ewaldCorr " << ewaldCorr << endl;
-    settingsfile << "noLub " << noLub << endl;
-    settingsfile << "recordMFP " << recordMFP << endl;
-    settingsfile << "includesteric " << steric << endl;
-    settingsfile << "ranPot " << randomPot  << endl;
-    settingsfile << "HPI " << hpi  << endl;
+    ofstream parameterFile;
+    parameterFile.open((folder + "/parameters.txt").c_str());
+    
+    // Print time and date
+    time_t t = time(0);   // get time now
+    struct tm * now = localtime( & t );
+    parameterFile << "date " << (now->tm_year + 1900) << '-' 
+         << (now->tm_mon + 1) << '-'
+         <<  now->tm_mday
+         << endl;
+    parameterFile << "starttime " << now->tm_hour << ":" << now->tm_min << ":" << now->tm_sec << endl;
+    parameterFile << "Sim_dir: " << folder << endl;
+    parameterFile << "ResetPos " << resetpos << endl;
+    parameterFile << "ewaldCorr " << ewaldCorr << endl;
+    parameterFile << "noLub " << noLub << endl;
+    parameterFile << "recordMFP " << recordMFP << endl;
+    parameterFile << "steric " << steric << endl;
+    parameterFile << "ranPot " << randomPot  << endl;
+    parameterFile << "HPI " << hpi  << endl;
     if (hpi == true){
-        settingsfile << "hpi_u " << randomPot  << endl;
-        settingsfile << "hpi_k " << randomPot  << endl;
+        parameterFile << "hpi_u " << randomPot  << endl;
+        parameterFile << "hpi_k " << randomPot  << endl;
     }
-    settingsfile << "d " << rDist << endl;
-    settingsfile << "p " << particlesize << endl;
-    settingsfile << "b " << boxsize << endl;
-    settingsfile << "dt " << timestep  << endl << "runs " << runs << endl << "steps " << steps << endl << "time: " << timestep*steps << endl;
-    settingsfile << "k " << potRange << endl << "U_0 " << potStrength << endl;
-    settingsfile << "a " << polymersize << endl;
+    parameterFile << "d " << rDist << endl;
+    parameterFile << "p " << particlesize << endl;
+    parameterFile << "b " << boxsize << endl;
+    parameterFile << "dt " << timestep << endl;
+    parameterFile << "runs " << runs << endl;
+    parameterFile << "steps " << steps << endl;
+    parameterFile << "time " << timestep*steps << endl;
+    parameterFile << "k " << potRange << endl;
+    parameterFile << "U_0 " << potStrength << endl;
+    parameterFile << "a " << polymersize << endl;
 
-    settingsfile.close();
+    parameterFile.close();
+}
+
+void parameterFileAppend(string folder, double executiontime){
+    // Appends parameters to parameters file
+    ofstream parameterFile;
+    parameterFile.open((folder + "/parameters.txt").c_str(), std::ios_base::app);
+    parameterFile << "ExecutionTime " << executiontime << " s" << endl;
+    parameterFile.close();
 }
 
 
