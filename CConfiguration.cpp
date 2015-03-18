@@ -89,6 +89,8 @@ CConfiguration::CConfiguration(
     if (polymersize != 0) _HI = true;
 	if (_HI) {
 		_edgeParticles = (int) ( ( _boxsize/_n_cellsAlongb )/polymersize + 0.001);
+        cout << "Spheres along one cell edge: " << _edgeParticles << endl;
+        cout << "Spheres along box edge: " << _n_cellsAlongb * _edgeParticles << endl;
 		_LJPot = false;
         // THIS NEEDS TO COME LAST !!!!!!!
 		initConstMobilityMatrix();
@@ -240,7 +242,8 @@ void CConfiguration::calcStochasticForces(){
     
 	if (_HI){  
 	    // return correlated random vector, which is scaled later by sqrt(2 dt)
-	    _f_sto = _RMLub.llt().matrixL() * ran_v;
+	    //_f_sto = _RMLub.llt().matrixL() * ran_v;
+        _f_sto = Cholesky3x3(_RMLub)  * ran_v;
 	}
 
     else { // no HI
@@ -795,6 +798,21 @@ Matrix3d CConfiguration::CholInvertPart (const MatrixXd A) {
 
     // perform inversion by cholesky decompoposition and return upper left 3x3 block
     return A.ldlt().solve(I).block<3,3>(0,0);
+}
+
+Matrix3d CConfiguration::Cholesky3x3(Matrix3d mat){
+    Matrix3d L = Matrix3d::Zero();
+    for (int i = 0; i < 3; i++)
+        for (int j = 0; j < (i+1); j++) {
+            double s = 0;
+            for (int k = 0; k < j; k++)
+                s += L(i, k) * L(j, k);
+            L(i, j) = (i == j) ?
+                           sqrt(mat(i, i) - s) :
+                           (1.0 / L(j, j) * (mat(i, j) - s));
+        }
+ 
+    return L;
 }
 
 Matrix3d CConfiguration::invert3x3 (const Matrix3d A) { 
