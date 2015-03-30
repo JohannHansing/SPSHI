@@ -85,22 +85,26 @@ CConfiguration::CConfiguration(
 	// init HI vectors matrices, etc
     _V = pow( _boxsize, 3);
     _cutoffMMsq = pow(0.05*_boxsize,2);
-    _n_cellsAlongb = 1;
+    _n_cellsAlongb = 5;
+    bool EwaldTest = true;
     if (polymersize != 0) _HI = true;
 	if (_HI) {
 		_edgeParticles = (int) ( ( _boxsize/_n_cellsAlongb )/polymersize + 0.001);
-        cout << "Spheres along one cell edge: " << _edgeParticles << endl;
-        cout << "Spheres along box edge: " << _n_cellsAlongb * _edgeParticles << endl;
 		_LJPot = false;
         // THIS NEEDS TO COME LAST !!!!!!!
-		initConstMobilityMatrix();
+		initConstMobilityMatrix(EwaldTest);
 		calcTracerMobilityMatrix(true);
 	}
 
     // TEST CUE to modify the directory the output data is written to!!
-    _testcue = "TEST";
-    
+    _testcue = "";
+    if ( _n_cellsAlongb != 1 ) _testcue = "n" + toString(_n_cellsAlongb);
+    if ( EwaldTest ) _testcue = "EwaldTestn" + toString(_n_cellsAlongb);
     if (!_testcue.empty()) cout << "***********************************\n****  WARNING: String '_testcue' is not empty   ****\n***********************************" << endl;
+    
+    
+    
+    
 
 }
 
@@ -487,7 +491,7 @@ void CConfiguration::calcLJPot(const double r, double& U, double& Fr){
 
 //**************************** HYDRODYNAMICS ****************************************************//
 
-void CConfiguration::initConstMobilityMatrix(){
+void CConfiguration::initConstMobilityMatrix(bool Ewaldtest){
 	double rxi = 0.0, ryi = 0.0, rzi = 0.0;
 	double rij = 0.0, rijsq = 0.0;
 	const double asq = _polyrad * _polyrad;
@@ -509,13 +513,26 @@ void CConfiguration::initConstMobilityMatrix(){
             for (int nz=0; nz < _n_cellsAlongb; nz++){
                 nvec << nx, ny, nz; // Position of 0 corner of the simulation box
                 for (unsigned int i = 0; i < zeroPos.size(); i++){
-            		double tmp = i * 2 * _polyrad;
                     _polySpheres.push_back( CPolySphere( zeroPos[i] + nvec * _boxsize/_n_cellsAlongb, _startpos ) );
             	}
             }
         }
 	}
     
+    // Ewaldtest runs the program with only spheres in the corners of the cells, i.e. one sphere per cell.
+    if (Ewaldtest){
+        _polySpheres.clear();
+        _edgeParticles = 1;
+    	for (int nx=0; nx < _n_cellsAlongb; nx++){
+    	    for (int ny=0; ny < _n_cellsAlongb; ny++){
+                for (int nz=0; nz < _n_cellsAlongb; nz++){
+                    nvec << nx, ny, nz; // Position of 0 corner of the simulation box
+                    _polySpheres.push_back( CPolySphere(  nvec * _boxsize/_n_cellsAlongb, _startpos ) );
+                }
+            }
+    	}
+    }
+    for (int i = 0 ;  i < _polySpheres.size(); i++) cout << _polySpheres[i].getPosition() << endl;
 
 	// create mobility matrix - Some elements remain constant throughout the simulation. Those are stored here.
 	_mobilityMatrix = MatrixXd::Identity( 3 * (_polySpheres.size() + 1) , 3 * (_polySpheres.size() + 1) );

@@ -116,7 +116,7 @@ private:
     void initPosHisto();
 	Eigen::Matrix3d RotnePragerDiffRad(const double & r, const double & rsq, const Eigen::Vector3d & rij);
 	Eigen::Matrix3d RotnePrager(const double & r, const double & rsq, const Eigen::Vector3d & rij);
-	void initConstMobilityMatrix();
+	void initConstMobilityMatrix(bool Ewaldtest);
 	Eigen::Matrix3d CholInvertPart (const Eigen::MatrixXd A);
     Eigen::Matrix3d Cholesky3x3(Eigen::Matrix3d mat);
     Eigen::Matrix3d invert3x3 (const Eigen::Matrix3d A);
@@ -130,7 +130,12 @@ private:
     Eigen::Vector3d midpointScheme(Eigen::Vector3d V0dt, Eigen::Vector3d F);
     void calcTracerMobilityMatrix(bool full);
 
-
+    template<typename T>
+    string toString(const T& value){
+        ostringstream oss;
+        oss << value;
+        return oss.str();
+    }
 
 
 public:
