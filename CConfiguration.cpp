@@ -532,7 +532,6 @@ void CConfiguration::initConstMobilityMatrix(bool Ewaldtest){
             }
     	}
     }
-    for (int i = 0 ;  i < _polySpheres.size(); i++) cout << _polySpheres[i].getPosition() << endl;
 
 	// create mobility matrix - Some elements remain constant throughout the simulation. Those are stored here.
 	_mobilityMatrix = MatrixXd::Identity( 3 * (_polySpheres.size() + 1) , 3 * (_polySpheres.size() + 1) );
