@@ -97,6 +97,10 @@ CConfiguration::CConfiguration(
 		calcTracerMobilityMatrix(true);
 	}
 
+    // TEST CUE to modify the directory the output data is written to!!
+    _testcue = "TEST";
+    
+    if (!_testcue.empty()) cout << "***********************************\n****  WARNING: String '_testcue' is not empty   ****\n***********************************" << endl;
 
 }
 
@@ -801,6 +805,7 @@ Matrix3d CConfiguration::CholInvertPart (const MatrixXd A) {
 }
 
 Matrix3d CConfiguration::Cholesky3x3(Matrix3d mat){
+    // source http://rosettacode.org/wiki/Cholesky_decomposition
     Matrix3d L = Matrix3d::Zero();
     for (int i = 0; i < 3; i++)
         for (int j = 0; j < (i+1); j++) {

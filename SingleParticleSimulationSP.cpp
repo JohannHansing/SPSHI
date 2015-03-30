@@ -23,11 +23,11 @@ using namespace std;
 //Function declarations
 string createDataFolder(
         bool respos, double dt, double simtime, double potRange, double potStrength, double boxsize,
-        double particlesize, double rDist, bool ewaldCorr, bool steric, bool randomPot, bool hpi, double hpi_u, double hpi_k, double polymersize, bool noLub);
+        double particlesize, double rDist, bool ewaldCorr, bool steric, bool randomPot, bool hpi, double hpi_u, double hpi_k, double polymersize, bool noLub, string cue);
 void parameterFile(
         string folder, bool respos, double particlesize, double boxsize, double timestep, double runs, double steps,
         double potStrength, double potRange, double rDist, bool ewaldCorr, bool recordMFP, bool steric, bool randomPot, bool hpi, double hpi_u,
-		double hpi_k, double polymersize, bool noLub);
+		double hpi_k, double polymersize, bool noLub, string cue);
 void parameterFileAppend(string folder, double executiontime);
 
 template<typename T>
@@ -114,10 +114,15 @@ int main(int argc, const char* argv[]){
     saveInt = steps/instantvalues;
     const int trajout = (int)(10/timestep);
     const int MMcalcStep = (int)(0.05/timestep);
+    
+    
+    //initialize instance of configuration
+    CConfiguration conf = CConfiguration(timestep, urange, ustrength, boxsize, rodDist, ewaldCorr, particlesize, noLub, includeSteric,
+    ranPot, hpi , hpi_u, hpi_k, polymersize);
         
     //Create data folders and print location as string to string "folder"
     string folder = createDataFolder(resetPos, timestep, simtime, urange, ustrength, boxsize, particlesize, rodDist, ewaldCorr, 
-                                     includeSteric, ranPot, hpi, hpi_u, hpi_k, polymersize, noLub);
+                                     includeSteric, ranPot, hpi, hpi_u, hpi_k, polymersize, noLub, conf.getTestCue());
 
 
     //initialize averages
@@ -131,11 +136,7 @@ int main(int argc, const char* argv[]){
     CAverage mfp_xyz;
     if ( recordMFP ) mfp_xyz = CAverage("mfp_xyz", folder, 1, 1);
 
-    
-    //initialize instance of configuration
-    CConfiguration conf = CConfiguration(timestep, urange, ustrength, boxsize, rodDist, ewaldCorr, particlesize, noLub, includeSteric,
-    ranPot, hpi , hpi_u, hpi_k, polymersize);
-		
+
 
     //create file to save the trajectory
     string traj_file = folder + "/Coordinates/single_traj.xyz";
@@ -152,7 +153,7 @@ int main(int argc, const char* argv[]){
 
     // Write parameter file parameters.txt
     parameterFile(folder, resetPos, particlesize, boxsize, timestep, runs, steps, ustrength, urange, rodDist, 
-	ewaldCorr, recordMFP, includeSteric, ranPot ,hpi, hpi_u, hpi_k, polymersize, noLub);
+	ewaldCorr, recordMFP, includeSteric, ranPot ,hpi, hpi_u, hpi_k, polymersize, noLub, conf.getTestCue());
     
     if (conf.testOverlap()){
         cout << "ERROR !!!!!!!!!!!!!!!!\nThere is an OVERLAP between the polymer network and the particle start position!" << endl;
@@ -293,14 +294,15 @@ int main(int argc, const char* argv[]){
 
 string createDataFolder(bool resetpos, double timestep, double simtime, double potRange, double potStrength,
         double boxsize, double particlesize, double rDist, bool ewaldCorr, bool steric, bool randomPot, bool hpi, double hpi_u, double hpi_k,
-		double polymersize, bool noLub){
+		double polymersize, bool noLub, string testcue){
     //NOTE: Maybe I can leave out dt, as soon as I settled on a timestep
     //NOTE: As soon as I create input-list with variables, I must change this function
     char range[5];
     sprintf(range, "%.3f", potRange);
     //In the definition of folder, the addition has to START WITH A STRING! for the compiler to know what to do (left to right).
     string folder = "sim_data";
-    if (!resetpos) folder = folder + "/noreset/n1";
+    if (!resetpos) folder = folder + "/noreset";
+    if (!testcue.empty()) folder = folder + "/test/" + testcue;
     if (ewaldCorr) folder = folder +  "/ewaldCorr";
     if (noLub) folder = folder +  "/noLub";
     if (randomPot) folder = folder + "/ranPot";
@@ -324,7 +326,7 @@ string createDataFolder(bool resetpos, double timestep, double simtime, double p
 
 void parameterFile(string folder, bool resetpos, double particlesize, double boxsize, double timestep, double runs, double steps, 
     double potStrength, double potRange, double rDist, bool ewaldCorr, bool recordMFP, bool steric, bool randomPot, bool hpi, double hpi_u, double hpi_k, 
-	double polymersize, bool noLub){
+	double polymersize, bool noLub, string testcue){
     //Creates a file where the simulation settings are stored
     ofstream parameterFile;
     parameterFile.open((folder + "/parameters.txt").c_str());
@@ -337,7 +339,8 @@ void parameterFile(string folder, bool resetpos, double particlesize, double box
          <<  now->tm_mday
          << endl;
     parameterFile << "starttime " << now->tm_hour << ":" << now->tm_min << ":" << now->tm_sec << endl;
-    parameterFile << "Sim_dir: " << folder << endl;
+    parameterFile << "Sim_dir " << folder << endl;
+    if (!testcue.empty()) parameterFile << "Test cue " << testcue << endl;
     parameterFile << "ResetPos " << resetpos << endl;
     parameterFile << "ewaldCorr " << ewaldCorr << endl;
     parameterFile << "noLub " << noLub << endl;

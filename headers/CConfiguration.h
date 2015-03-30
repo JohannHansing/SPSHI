@@ -62,8 +62,9 @@ private:
     Eigen::Vector3d _startpos;          //Stores where the particle starting position was. This is needed to calculate the mean square displacement
     Eigen::Vector3d _prevpos;           //Stores previous particle position before particle is moved.
     std::vector<std::vector<std::vector<int> > > _posHistoM;
-
     int _min, _max;        // parameters for determining up to which order neighboring rods are considered for the potential
+    
+    string _testcue;
 
     //Particle parameters
     Eigen::Vector3d _ppos;    //initialize particle position (DO IT LIKE resetpos FOR MOVEPARTICLEFOLLOW/RESET)
@@ -159,6 +160,7 @@ public:
     void addHistoValue();
     void printHistoMatrix(string folder);
     void checkDisplacementforMM();
+    string getTestCue(){ return _testcue; };
 
 
 
