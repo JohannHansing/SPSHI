@@ -632,7 +632,7 @@ void CConfiguration::calcTracerMobilityMatrix(bool full){
 	for (unsigned int j = 0; j < _polySpheres.size(); j++){
         vec_rij = _ppos - _polySpheres[j].getPosition();
 		
-		if (full || _noEwald){
+		if (full){
 		    // Calculation of different particle width Rotne-Prager Ewald sum 
 			unsigned int j_count = 3 * (j + 1); //  plus 1 is necessary due to omitted tracer particle
             if (_noEwald) muij = RotnePrager( vec_rij, asq );
@@ -643,7 +643,7 @@ void CConfiguration::calcTracerMobilityMatrix(bool full){
 			_mobilityMatrix.block<3,3>(0,j_count) = muij;
 			//noalias(subrange(_mobilityMatrix, j_count, j_count + 3, 0, 3)) = muij;
 		}
-		if (!_noLub && !_noEwald) lubM += lubricate(vec_rij);
+		if (!_noLub ) lubM += lubricate(vec_rij);
 	}
 	//cout << "############# _mobilityMatrix #########\n" << _mobilityMatrix << endl;
         //cout << "############# lubM #########\n" << lubM << endl;
