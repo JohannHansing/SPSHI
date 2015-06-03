@@ -94,6 +94,7 @@ private:
 	double _alpha;
 	double _r_cutoffsq;
 	double _k_cutoff;
+    bool _noEwald;
 	
 	//Lubrication parameters
 	int _mmax;
@@ -124,6 +125,7 @@ private:
 	Eigen::Matrix3d reciprocalSpcSm( const Eigen::Vector3d & rij, const double asq );
 	Eigen::Matrix3d realSpcM(const double & rsq, const Eigen::Vector3d & rij, const double asq);
 	Eigen::Matrix3d reciprocalSpcM(const double ksq, const Eigen::Vector3d & kij,  const double asq);
+    Eigen::Matrix3d RotnePrager( const Eigen::Vector3d & rij, const double asq);
 	
 	Eigen::Matrix3d lub2p( Eigen::Vector3d rij, double rsq, unsigned int mmax );
 	Eigen::Matrix3d lubricate( const Eigen::Vector3d & rij );

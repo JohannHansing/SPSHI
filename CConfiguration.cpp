@@ -83,10 +83,13 @@ CConfiguration::CConfiguration(
 	
 	
 	// init HI vectors matrices, etc
-    _V = pow( _boxsize, 3);
+    // Configurations
+    _n_cellsAlongb = 11;
+    bool EwaldTest = true; // Ewaldtest runs the program with only spheres in the corners of the cells, i.e. one sphere per cell.
+    _noEwald = true;
+    
+    _V = pow( _boxsize, 3 );
     _cutoffMMsq = pow(0.05*_boxsize,2);
-    _n_cellsAlongb = 5;
-    bool EwaldTest = true;
     if (polymersize != 0) _HI = true;
 	if (_HI) {
 		_edgeParticles = (int) ( ( _boxsize/_n_cellsAlongb )/polymersize + 0.001);
@@ -100,6 +103,8 @@ CConfiguration::CConfiguration(
     _testcue = "";
     if ( _n_cellsAlongb != 1 ) _testcue = "n" + toString(_n_cellsAlongb);
     if ( EwaldTest ) _testcue = "EwaldTestn" + toString(_n_cellsAlongb);
+    if ( _noEwald ) _testcue = "noEwald";
+    if ( _noEwald && EwaldTest ) _testcue = "noEwald/EwaldTestn" + toString(_n_cellsAlongb);
     if (!_testcue.empty()) cout << "***********************************\n****  WARNING: String '_testcue' is not empty   ****\n***********************************" << endl;
     
     
@@ -445,6 +450,28 @@ bool CConfiguration::testOverlap(){
 //         }
 //     }
 //     return overlaps;
+    
+    
+    // "PROPER" METHOD FOR EwaldTest, where the overlap is calculated for spheres in the corners, not rods.
+    // Vector3d r_ij;
+//     if (Ewaldtest){
+//         for (int nx = 0; nx <= _n_cellsAlongb; nx++ ){
+//             r_ij(0) = _ppos(0) -  cellwidth * nx;
+//             for (int ny = 0; ny <= _n_cellsAlongb; ny++ ){
+//                 r_ij(1) = _ppos(1) -  cellwidth * ny;
+//                 for (int nz = 0; nz <= _n_cellsAlongb; nz++ ){
+//                     r_ij(2) = _ppos(2) -  cellwidth * nz;
+//                     if (r_ij.squaredNorm() <= _stericrSq){
+//                         overlaps = true;
+//                         return overlaps;
+//                     }
+//                     if (overlaps == true) continue;
+//                 }
+//                 if (overlaps == true) continue;
+//             }
+//             if (overlaps == true) continue;
+//         }
+//     }
 
     // KEEP THIS TO MAYBE IMPLEMENT MORE EFFICIENT testOVERLAP
     // --> store cell of tracerparticle and adjust to L1 and L2
@@ -560,7 +587,8 @@ void CConfiguration::initConstMobilityMatrix(bool Ewaldtest){
 		/*_mobilityMatrix(0,0) = 1;  already taken care of due to identity matrix. The extra F_i0 part in the Ewald sum is only correction to reciprocal sum.
 		 * I leave out the reciprocal summation for the tracer particle self diff, because it is in only in the simulation box unit cell. */
 
-		_mobilityMatrix.block<3,3>(i_count,i_count) = selfmob;
+        if (_noEwald) _mobilityMatrix.block<3,3>(i_count,i_count) = _pradius/_polyrad * Matrix3d::Identity();
+		else _mobilityMatrix.block<3,3>(i_count,i_count) = selfmob;
 	}
 
 
@@ -576,7 +604,8 @@ void CConfiguration::initConstMobilityMatrix(bool Ewaldtest){
 		 * Calculation of RP Ewald sum
 		 */
 	        Matrix3d muij = Matrix3d::Zero();
-			muij = realSpcSm( vec_rij, false, asq ) + reciprocalSpcSm( vec_rij, asq );
+            if (_noEwald) muij = RotnePrager( vec_rij, asq );
+            else muij = realSpcSm( vec_rij, false, asq ) + reciprocalSpcSm( vec_rij, asq );
 	//		cout << vec_rij << endl;
 	//		cout << muij << endl; // TODO del
 	//		cout << "real: " << realSpcSm( vec_rij, false ) << " ---- reciprocal: " << reciprocalSpcSm( vec_rij, false ) << endl;
@@ -597,22 +626,24 @@ void CConfiguration::calcTracerMobilityMatrix(bool full){
 	// vector for outer product in muij
 	Vector3d vec_rij(3);
 	Matrix3d lubM = Matrix3d::Zero(); 
-	
+	Matrix3d muij;
+    
 // loop over tracer - particle mobility matrix elements
-	for (unsigned int j = 0; j < 3 * _edgeParticles - 2; j++){
+	for (unsigned int j = 0; j < _polySpheres.size(); j++){
         vec_rij = _ppos - _polySpheres[j].getPosition();
 		
-		if (full){
+		if (full || _noEwald){
 		    // Calculation of different particle width Rotne-Prager Ewald sum 
 			unsigned int j_count = 3 * (j + 1); //  plus 1 is necessary due to omitted tracer particle
-			Matrix3d muij  = realSpcSm( vec_rij, false, asq ) + reciprocalSpcSm( vec_rij, asq );
+            if (_noEwald) muij = RotnePrager( vec_rij, asq );
+			else muij = realSpcSm( vec_rij, false, asq ) + reciprocalSpcSm( vec_rij, asq );
 	
 			// only lower triangular of symmetric matrix is filled and used
 			_mobilityMatrix.block<3,3>(j_count,0) = muij;
 			_mobilityMatrix.block<3,3>(0,j_count) = muij;
 			//noalias(subrange(_mobilityMatrix, j_count, j_count + 3, 0, 3)) = muij;
 		}
-		if (!_noLub) lubM += lubricate(vec_rij);
+		if (!_noLub && !_noEwald) lubM += lubricate(vec_rij);
 	}
 	//cout << "############# _mobilityMatrix #########\n" << _mobilityMatrix << endl;
         //cout << "############# lubM #########\n" << lubM << endl;
@@ -670,7 +701,7 @@ Matrix3d  CConfiguration::realSpcSm( const Vector3d & rij, const bool self, cons
 				if ((n1-nmax) == 0 && (n2-nmax) == 0 && (n3-nmax) == 0 && self) continue;
 				else{  
 					rn_vec(2) = v3[n3];
-					const double rsq = (rn_vec.transpose() * rn_vec);
+					const double rsq = rn_vec.squaredNorm();
 	                if ( rsq <= r_cutoffsq ){ 
 						Mreal += realSpcM(rsq, rn_vec, asq);
 						
@@ -696,7 +727,7 @@ Matrix3d  CConfiguration::reciprocalSpcSm( const Vector3d & rij, const double as
 				if (n1 == 0 && n2 == 0 && n3 == 0)  continue;
 				else{ 
 	                kvec(0) = n1 * ntok, kvec(1) = n2 * ntok, kvec(2) = n3 * ntok;
-					const double ksq = (kvec.transpose()*kvec);
+					const double ksq = kvec.squaredNorm();
                     if ( ksq <= k_cutoffsq ){  
 						Mreciprocal += reciprocalSpcM(ksq, kvec, asq) * cos((kvec.transpose()* rij));
 					}
@@ -742,7 +773,16 @@ Matrix3d  CConfiguration::reciprocalSpcM(const double ksq, const Vector3d & kij,
     // return _pradius  * ( 1. + c1 + 2. * c1 * c1 ) * ( 6. * M_PI / (ksq * V)) * exp( - c1 ) * ( I - (kij*kij.transpose())/ksq);
 }
 
+//------------------------------------- Rotne-Prager ---------------------------------------
 
+Matrix3d CConfiguration::RotnePrager(const Vector3d & rij, const double asq) {
+	Matrix3d  I = Matrix3d::Identity();
+    const double rsq = rij.squaredNorm();
+    const double r = sqrt(rsq);
+
+
+    return _pradius * 3 / ( 4 * r ) * ( ( 1 + asq / (3 * rsq )) * I + ( 1 - asq / rsq ) * rij*rij.transpose() / rsq );
+}
 
 
 //------------------------------------- Lubrication Resistance Matrix ------------------------------
@@ -763,7 +803,7 @@ Matrix3d  CConfiguration::lubricate( const Vector3d & rij ){
 			rn_vec(1) = values_2[n2];
 		    for (int n3 = 0; n3 < 3; n3++) {
 				rn_vec(2) = values_3[n3];
-				const double rsq = (rn_vec.transpose() * rn_vec);
+				const double rsq = rn_vec.squaredNorm();
                 if ( rsq <= _cutofflubSq ){ 
 					if (rsq < _cutofflubSq/2) lubPart += lub2p(rn_vec, rsq, 8);
 					else lubPart += lub2p(rn_vec, rsq, 5);
