@@ -63,7 +63,7 @@ CConfiguration::CConfiguration(
     // seed = 0:  use time, else any integer
     // init random number generator
     setRanNumberGen(0);
-    
+
     //Ewald sum stuff
     _nmax = 2; // This corresponds to a cutoff of r_cutoff = 1 * _boxsize
 	_alpha = 1 * sqrt(M_PI) / _boxsize; // This value for alpha corresponds to the suggestion in Beenakker1986
@@ -84,9 +84,9 @@ CConfiguration::CConfiguration(
 	
 	// init HI vectors matrices, etc
     // Configurations
-    _n_cellsAlongb = 11;
-    bool EwaldTest = true; // Ewaldtest runs the program with only spheres in the corners of the cells, i.e. one sphere per cell.
-    _noEwald = true;
+    _n_cellsAlongb = 1;
+    bool EwaldTest = false; // Ewaldtest runs the program with only spheres in the corners of the cells, i.e. one sphere per cell.
+    _noEwald = false;       // noEwald to use normal Rotne Prager instead of Ewald summed one
     
     _V = pow( _boxsize, 3 );
     _cutoffMMsq = pow(0.05*_boxsize,2);
@@ -97,6 +97,7 @@ CConfiguration::CConfiguration(
         // THIS NEEDS TO COME LAST !!!!!!!
 		initConstMobilityMatrix(EwaldTest);
 		calcTracerMobilityMatrix(true);
+        //_pbc_corr = 1 - 1/(_polySpheres.size()+1); // assign system size dependent value to pbc correction for tracer displacement in porous medium
 	}
 
     // TEST CUE to modify the directory the output data is written to!!
@@ -106,6 +107,7 @@ CConfiguration::CConfiguration(
     if ( _noEwald ) _testcue = "noEwald";
     if ( _noEwald && EwaldTest ) _testcue = "noEwald/EwaldTestn" + toString(_n_cellsAlongb);
     if (!_testcue.empty()) cout << "***********************************\n****  WARNING: String '_testcue' is not empty   ****\n***********************************" << endl;
+    if ( _boxsize/_n_cellsAlongb != 10 ) cout << "***********************************\n****  WARNING: boxsize b != 10 * n_cell !!!  ****\n***********************************" << endl;
     
     
     
@@ -188,7 +190,8 @@ void CConfiguration::makeStep(){
     }
 
 	// Update particle position
-	_ppos += V0dt + Vdriftdt;
+	_ppos += (V0dt + Vdriftdt) ;
+    //if (_ewaldCorr) _ppos *= _pbc_corr;
 
 /*	}
 	else{
@@ -333,9 +336,6 @@ void CConfiguration::calcMobilityForces(){
         }
     }
     _upot = Epot;
-	
-	// calc HI mobility matrix here, since it needs to be defined for random force normalisation
-	//if (_HI){ calcTracerMobilityMatrix(); }
 }
 
 
@@ -527,7 +527,7 @@ void CConfiguration::initConstMobilityMatrix(bool Ewaldtest){
 	// store the edgeParticle positions, so that I can simply loop through them later
     std::vector<Vector3d> zeroPos( 3 * _edgeParticles - 2 , Vector3d::Zero() );
     Vector3d nvec;
-    double offset = (_boxsize/_n_cellsAlongb - 2 * _polyrad * _edgeParticles)/_edgeParticles;
+    //TODO not needed anymore: double offset = (_boxsize/_n_cellsAlongb - 2 * _polyrad * _edgeParticles)/_edgeParticles;
 	// store the edgeParticle positions in first cell in zeroPos
 	for (int i = 1; i < _edgeParticles; i++){
 		double tmp = i * (_boxsize/_n_cellsAlongb) / _edgeParticles;
@@ -698,7 +698,7 @@ Matrix3d  CConfiguration::realSpcSm( const Vector3d & rij, const bool self, cons
 		    for (int n3 = 0; n3 <= maxIter; n3++){
 				
 				// CASE n ==(0, 0, 0) and nu == eta 
-				if ((n1-nmax) == 0 && (n2-nmax) == 0 && (n3-nmax) == 0 && self) continue;
+				if ((n1==nmax) && (n2==nmax) && (n3==nmax) && self) continue;  // (n1 == nmax) means (n1-nmax == 0) but faster !!
 				else{  
 					rn_vec(2) = v3[n3];
 					const double rsq = rn_vec.squaredNorm();
@@ -992,25 +992,6 @@ void CConfiguration::resetposition(){
 
 //----------------------- Rotne Prager ------------------------
 
-
- Matrix3d  CConfiguration::RotnePrager(const double & r, const double & rsq,
- 										   const Vector3d & rij) {
-// 	Matrix3d  I = Matrix3d::Identity();
-//
-// 	double c1 = 0.75 * _polyrad / r; 	//3. * a / (4. * r);
-// 	double c2 = 2. * _polyrad * _polyrad / rsq;
-// 	return c1*( (1.+c2/3)*I + prod( (1.-c2)*I , matrix<double>((rij*rij.transpose())) / rsq));
-// 	                         // = outer_prod(v1,v2) * (1-c2)  works also for the second part of this eq.
-}
-
-Matrix3d CConfiguration::RotnePragerDiffRad(const double & r, const double & rsq,
-										          const Vector3d & rij) {
-	// Matrix3d  I = Matrix3d::Identity();
-	//
-	// double c1 = 0.75 * _pradius / r; 	//3. * _p/2 / (4. * _r);
-	// double c2 = (_polyrad * _polyrad + _pradius * _pradius) / rsq;
-	// return c1*( (1.+c2/3)*I + prod( (1.-c2)*I , matrix<double>((rij*rij.transpose())) / rsq));
-}
 
 
 

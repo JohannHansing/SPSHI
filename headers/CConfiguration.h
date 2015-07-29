@@ -85,8 +85,8 @@ private:
     double _cutoffMMsq;
     double _stericrSq;
     int _n_cellsAlongb;
-    
-	
+    // LOAD OF CRAP I THINK! This term is a correction for the tracer displacement at every time step due to the repeated tracer particle. It is needed to ensure that the average velocity of all particles in the system is 0. It equals (1-1/N) where N is the number of particles int the simulation box. For reference, see Durlofsky1987a page 3333 - Fundamental solution for flow in porous media and comparison with the Brinkmann equation.
+    //double _pbc_corr; 
 	
 	// Ewald sum parameters
 	int _nmax;
@@ -115,8 +115,6 @@ private:
     void modifyPot(double& U, double& Fr, double dist);
     void calcLJPot(const double r, double &U, double &dU);
     void initPosHisto();
-	Eigen::Matrix3d RotnePragerDiffRad(const double & r, const double & rsq, const Eigen::Vector3d & rij);
-	Eigen::Matrix3d RotnePrager(const double & r, const double & rsq, const Eigen::Vector3d & rij);
 	void initConstMobilityMatrix(bool Ewaldtest);
 	Eigen::Matrix3d CholInvertPart (const Eigen::MatrixXd A);
     Eigen::Matrix3d Cholesky3x3(Eigen::Matrix3d mat);

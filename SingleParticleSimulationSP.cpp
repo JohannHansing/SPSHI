@@ -160,7 +160,7 @@ int main(int argc, const char* argv[]){
         return 0;
     }
 
-// **************START OF RUNS-LOOP
+// ************** START OF RUNS-LOOP *****************
     for (int l = 0; l<runs; l++){
 
         if (resetPos) conf.resetposition();         
@@ -245,7 +245,7 @@ int main(int argc, const char* argv[]){
             //if (((i % 5) == 0) && recordPosHisto) conf.addHistoValue();
             
         }
-    }//----------END OF RUNS-LOOP
+    }//----------END OF RUNS-LOOP ----------------
 
 
 
