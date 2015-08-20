@@ -238,6 +238,11 @@ int main(int argc, const char* argv[]){
             // end steric
             
 
+            if (std::isnan(conf.getppos()[0])){
+                cout << "NAN position\n" << i << endl;
+                return 0;
+            }
+
             if (stepcount%trajout == 0) {
                 std::vector<double> ppos = conf.getppos();
                 trajectoryfile << fixed << stepcount * timestep << "\t" << ppos[0] << " " << ppos[1] << " " << ppos[2] << endl;

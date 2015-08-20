@@ -35,7 +35,7 @@ CConfiguration::CConfiguration(
     _f_mob = Vector3d::Zero();
     _f_sto = Vector3d::Zero();
     _mu_sto = sqrt( 2 * _timestep );                 //timestep for stochastic force
-	_hpi = hpi; 
+	_hpi = hpi;
 	_hpi_u = hpi_u;
 	_hpi_k = hpi_k;
     for (int i = 0; i < 3; i++){
@@ -47,11 +47,11 @@ CConfiguration::CConfiguration(
         _prevpos(i) = _resetpos;
         _lastcheck[i] = _startpos(i);
     }
-    
-    
+
+
     bool posHisto = false;
     if (posHisto) initPosHisto();
-	
+
 
     // This is for inclusion of 2nd Order rods if k is 0.2b or larger
     _min = -1, _max = 3;
@@ -65,13 +65,13 @@ CConfiguration::CConfiguration(
     setRanNumberGen(0);
 
     //Ewald sum stuff
-    _nmax = 2; // This corresponds to a cutoff of r_cutoff = 1 * _boxsize
+    _nmax = 3; // This corresponds to a cutoff of r_cutoff = 1 * _boxsize
 	_alpha = 1 * sqrt(M_PI) / _boxsize; // This value for alpha corresponds to the suggestion in Beenakker1986
 	_k_cutoff = 2. * _alpha * _alpha * _nmax * _boxsize;   /* This corresponds to suggestion by Jain2012 ( equation 15 and 16 ). */
-	_nkmax = (int) (_k_cutoff * _boxsize / (2. * M_PI) + 0.5);   /* The last bit (+0.5) may be needed to ensure that the next higher integer 
+	_nkmax = (int) (_k_cutoff * _boxsize / (2. * M_PI) + 0.5);   /* The last bit (+0.5) may be needed to ensure that the next higher integer
 		                                                   * k value is taken for kmax */
 	_r_cutoffsq = pow(_nmax * _boxsize, 2);   // Like Jain2012, r_cutoff is chosen such that exp(-(r_cutoff * alpha)^2) is small
-	
+
 	// lubrication stuff
 	const double lam = polymersize/psize;
 	const double c1 = pow(1+lam, -3);
@@ -80,16 +80,16 @@ CConfiguration::CConfiguration(
 	_g[2] = 1/42 * ( 1 + lam*(18 - lam*(29 + lam*(18 + lam)))) * c1;
     _cutofflubSq = pow(7,2)*(pow(_polyrad,2) + pow(_pradius,2));
     _stericrSq = pow(_pradius + _polyrad, 2);
-	
-	
+
+
 	// init HI vectors matrices, etc
     // Configurations
     _n_cellsAlongb = 1;
     bool EwaldTest = false; // Ewaldtest runs the program with only spheres in the corners of the cells, i.e. one sphere per cell.
     _noEwald = false;       // noEwald to use normal Rotne Prager instead of Ewald summed one
-    
+
     _V = pow( _boxsize, 3 );
-    _cutoffMMsq = pow(0.05*_boxsize,2);
+    _cutoffMMsq = pow(0.05*_boxsize/_n_cellsAlongb,2);
     if (polymersize != 0) _HI = true;
 	if (_HI) {
 		_edgeParticles = (int) ( ( _boxsize/_n_cellsAlongb )/polymersize + 0.001);
@@ -108,10 +108,10 @@ CConfiguration::CConfiguration(
     if ( _noEwald && EwaldTest ) _testcue = "noEwald/EwaldTestn" + toString(_n_cellsAlongb);
     if (!_testcue.empty()) cout << "***********************************\n****  WARNING: String '_testcue' is not empty   ****\n***********************************" << endl;
     if ( _boxsize/_n_cellsAlongb != 10 ) cout << "***********************************\n****  WARNING: boxsize b != 10 * n_cell !!!  ****\n***********************************" << endl;
-    
-    
-    
-    
+
+
+
+
 
 }
 
@@ -128,7 +128,7 @@ void CConfiguration::checkDisplacementforMM(){
     for (int i=0; i<3; i++){
         movedsq += pow(_ppos(i) + _boxsize *  _boxnumberXYZ[i] - _lastcheck[i] , 2);
     }
-    if ( movedsq > _cutoffMMsq ){  
+    if ( movedsq > _cutoffMMsq ){
         calcTracerMobilityMatrix(true);
 		// new start point for displacement check
         _lastcheck[0] = _ppos(0) + _boxsize *  _boxnumberXYZ[0];
@@ -146,8 +146,8 @@ Vector3d CConfiguration::midpointScheme(Vector3d V0dt, Vector3d F){
     ppos_prime = _ppos + V0dt / n;
 
 	Vector3d vec_rij;
-	Matrix3d lubM = Matrix3d::Zero(); 
-	
+	Matrix3d lubM = Matrix3d::Zero();
+
 // loop over tracer - particle mobility matrix elements
 	for (unsigned int j = 0; j < 3 * _edgeParticles - 2; j++){
 		vec_rij = ppos_prime - _polySpheres[j].getPosition();
@@ -157,15 +157,15 @@ Vector3d CConfiguration::midpointScheme(Vector3d V0dt, Vector3d F){
     //cout << "############# lubM #########\n" << lubM << endl;
 
 
-	// Add lubrication Part to tracer Resistance Matrix and invert	
+	// Add lubrication Part to tracer Resistance Matrix and invert
     Matrix3d tracerMM_prime = invert3x3(_resMNoLub + lubM);
-    
+
     // Note that _f_sto has variance sqrt( _tracerMM ), as it is advised in the paper of Banchio2003
 	Vector3d V_primedt = tracerMM_prime * (F * _timestep + _f_sto * _mu_sto);
-    
+
     // return V_drift * dt
     return n/2 * (V_primedt - V0dt);
-    
+
 }
 
 
@@ -191,6 +191,9 @@ void CConfiguration::makeStep(){
 
 	// Update particle position
 	_ppos += (V0dt + Vdriftdt) ;
+    if (std::isnan(_ppos(0))){
+        cout << "NAN position\n" << _f_mob << endl << _f_sto << endl;
+    }
     //if (_ewaldCorr) _ppos *= _pbc_corr;
 
 /*	}
@@ -200,7 +203,7 @@ void CConfiguration::makeStep(){
 	        _ppos(i) += _timestep * _f_mob(i) + _mu_sto * _f_sto[i];
 	    }
 	}
-  */  
+  */
 }
 
 void CConfiguration::checkBoxCrossing(){
@@ -249,14 +252,14 @@ void CConfiguration::calcStochasticForces(){
     // samples from normal distribution with variance 1 (later sqrt(2) is multiplied)
     boost::variate_generator<boost::mt19937&, boost::normal_distribution<double> > ran_gen(
             *m_igen, boost::normal_distribution<double>(0, 1));
-	
+
 	Vector3d ran_v = Vector3d::Zero();
-	
+
     ran_v(0) = ran_gen();
 	ran_v(1) = ran_gen();
 	ran_v(2) = ran_gen();
-    
-	if (_HI){  
+
+	if (_HI){
 	    // return correlated random vector, which is scaled later by sqrt(2 dt)
 	    //_f_sto = _RMLub.llt().matrixL() * ran_v;
         _f_sto = Cholesky3x3(_RMLub)  * ran_v;
@@ -304,7 +307,7 @@ void CConfiguration::calcMobilityForces(){
             r_abs = sqrt(r_i * r_i + r_k * r_k); //distance to the rods
 
             calculateExpPotential(r_abs, utmp, frtmp);
-			
+
 			if (_hpi) calculateExpHPI(r_abs, utmp, frtmp);
 
             if (_ranU){
@@ -450,8 +453,8 @@ bool CConfiguration::testOverlap(){
 //         }
 //     }
 //     return overlaps;
-    
-    
+
+
     // "PROPER" METHOD FOR EwaldTest, where the overlap is calculated for spheres in the corners, not rods.
     // Vector3d r_ij;
 //     if (Ewaldtest){
@@ -478,15 +481,13 @@ bool CConfiguration::testOverlap(){
 
     double r_i = 0, r_k = 0;
     double r_sq = 0;
-    double L1[] = {0, _boxsize/_n_cellsAlongb, 0, _boxsize/_n_cellsAlongb};  //these two arrays are only needed for the iteration.
-    double L2[] = {0, 0, _boxsize/_n_cellsAlongb, _boxsize/_n_cellsAlongb};
     double cellwidth = _boxsize/_n_cellsAlongb;
 
     for (int i = 0; i < 2; i++){
         for (int k = i+1; k < 3; k++){
             for (int n_i = 0; n_i <= _n_cellsAlongb; n_i++ ){
                 r_i = _ppos(i) - cellwidth * n_i;
-                
+
                 for (int n_k = 0; n_k <= _n_cellsAlongb; n_k++ ){
                     r_k = _ppos(k) - cellwidth * n_k;
                     //this is needed if we dont want the rods to cross each other to create a strong potential well
@@ -522,8 +523,8 @@ void CConfiguration::initConstMobilityMatrix(bool Ewaldtest){
 	double rxi = 0.0, ryi = 0.0, rzi = 0.0;
 	double rij = 0.0, rijsq = 0.0;
 	const double asq = _polyrad * _polyrad;
-	
-	
+
+
 	// store the edgeParticle positions, so that I can simply loop through them later
     std::vector<Vector3d> zeroPos( 3 * _edgeParticles - 2 , Vector3d::Zero() );
     Vector3d nvec;
@@ -532,7 +533,7 @@ void CConfiguration::initConstMobilityMatrix(bool Ewaldtest){
 	for (int i = 1; i < _edgeParticles; i++){
 		double tmp = i * (_boxsize/_n_cellsAlongb) / _edgeParticles;
 		zeroPos[i](0) = tmp;
-		zeroPos[i + (_edgeParticles - 1)](1) = tmp;  
+		zeroPos[i + (_edgeParticles - 1)](1) = tmp;
 		zeroPos[i + 2 * (_edgeParticles - 1)](2) = tmp;
 	}
 	for (int nx=0; nx < _n_cellsAlongb; nx++){
@@ -545,7 +546,7 @@ void CConfiguration::initConstMobilityMatrix(bool Ewaldtest){
             }
         }
 	}
-    
+
     // Ewaldtest runs the program with only spheres in the corners of the cells, i.e. one sphere per cell.
     if (Ewaldtest){
         _polySpheres.clear();
@@ -562,17 +563,17 @@ void CConfiguration::initConstMobilityMatrix(bool Ewaldtest){
 
 	// create mobility matrix - Some elements remain constant throughout the simulation. Those are stored here.
 	_mobilityMatrix = MatrixXd::Identity( 3 * (_polySpheres.size() + 1) , 3 * (_polySpheres.size() + 1) );
-     
+
 
     // Eigen-vector for interparticle distance. Needs to initialized as zero vector for self mobilities.
 	Vector3d vec_rij = Vector3d::Zero();
-	
+
 	// on-diagonal elements of mobility matrix: Tracer first
     Matrix3d selfmob = realSpcSm( vec_rij, true, _pradius * _pradius ) + reciprocalSpcSm( vec_rij, _pradius * _pradius );
     double self_plus = 1. + _pradius / sqrt (M_PI) * ( - 6. * _alpha + 40. * pow(_alpha,3) * _pradius * _pradius / 3. );
 
 	if (_ewaldCorr) _mobilityMatrix.block<3,3>(0,0) = selfmob + Matrix3d::Identity() * self_plus; // ewaldCorr
-	
+
 	// now on diagonals for edgeparticles
 	selfmob = realSpcSm( vec_rij, true, asq ) + reciprocalSpcSm( vec_rij, asq );
     // double self_plus = _pradius/_polyrad + _pradius / sqrt (M_PI) * ( - 6. * _alpha );  //TODO  alt
@@ -595,11 +596,11 @@ void CConfiguration::initConstMobilityMatrix(bool Ewaldtest){
 	// The mobility matrix elements for the interacting edgeParticles are stored here, since they do not change position
 	for (unsigned int i = 0; i < _polySpheres.size(); i++){
 		unsigned int i_count = 3 * (i + 1);       // plus 1 is necessary due to omitted tracer particle
-		
+
 		for (unsigned int j = i + 1; j < _polySpheres.size(); j++) {
 			vec_rij = _polySpheres[i].getPosition() - _polySpheres[j].getPosition();
 			unsigned int  j_count = 3 * (j + 1);    // plus 1 is necessary due to omitted tracer particle
-		
+
 		/*
 		 * Calculation of RP Ewald sum
 		 */
@@ -609,35 +610,43 @@ void CConfiguration::initConstMobilityMatrix(bool Ewaldtest){
 	//		cout << vec_rij << endl;
 	//		cout << muij << endl; // TODO del
 	//		cout << "real: " << realSpcSm( vec_rij, false ) << " ---- reciprocal: " << reciprocalSpcSm( vec_rij, false ) << endl;
-			
+
 			// both lower and upper triangular of symmetric matrix need be filled
 			_mobilityMatrix.block<3,3>(j_count,i_count) = muij;
 			_mobilityMatrix.block<3,3>(i_count,j_count) = muij;
             //cout << "----------------\n" << selfmob << endl;
 		}
-	}	
+	}
 }
 
 
 
 void CConfiguration::calcTracerMobilityMatrix(bool full){
 	const double asq = (_polyrad * _polyrad + _pradius * _pradius)/2;
-		
+
 	// vector for outer product in muij
 	Vector3d vec_rij(3);
-	Matrix3d lubM = Matrix3d::Zero(); 
+    double rij_sq;
+	Matrix3d lubM = Matrix3d::Zero();
 	Matrix3d muij;
-    
+
 // loop over tracer - particle mobility matrix elements
 	for (unsigned int j = 0; j < _polySpheres.size(); j++){
         vec_rij = _ppos - _polySpheres[j].getPosition();
-		
+        rij_sq = vec_rij.squaredNorm();
+        if (rij_sq <= _stericrSq){ // If there is overlap between particles, the distance is set to a very small value, according to Brady and Bossis in Phung1996
+            // set distance to 0.00000001 + _stericrSq but preserve direction
+            double corr = (0.00000001 + sqrt(_stericrSq)) / sqrt(rij_sq);
+            vec_rij *= corr;
+            cout << "Overlap!" << vec_rij << endl;
+        }
+
 		if (full){
-		    // Calculation of different particle width Rotne-Prager Ewald sum 
+		    // Calculation of different particle width Rotne-Prager Ewald sum
 			unsigned int j_count = 3 * (j + 1); //  plus 1 is necessary due to omitted tracer particle
             if (_noEwald) muij = RotnePrager( vec_rij, asq );
 			else muij = realSpcSm( vec_rij, false, asq ) + reciprocalSpcSm( vec_rij, asq );
-	
+
 			// only lower triangular of symmetric matrix is filled and used
 			_mobilityMatrix.block<3,3>(j_count,0) = muij;
 			_mobilityMatrix.block<3,3>(0,j_count) = muij;
@@ -647,13 +656,13 @@ void CConfiguration::calcTracerMobilityMatrix(bool full){
 	}
 	//cout << "############# _mobilityMatrix #########\n" << _mobilityMatrix << endl;
         //cout << "############# lubM #########\n" << lubM << endl;
-		
+
 	// create resistance matrix - Some elements remain constant throughout the simulation. Those are stored here.
-	if (full){ 
-		 _resMNoLub = CholInvertPart(_mobilityMatrix); 
+	if (full){
+		 _resMNoLub = CholInvertPart(_mobilityMatrix);
          //cout << "$$$$$$$ _resMNoLub $$$$$$$$$\n" << _resMNoLub << endl;
 	}
-	// Add lubrication Part to tracer Resistance Matrix and invert	
+	// Add lubrication Part to tracer Resistance Matrix and invert
     _RMLub = _resMNoLub + lubM;
 	_tracerMM = invert3x3(_RMLub);
     // cout << "tracerMM\n" << _tracerMM << endl;
@@ -690,21 +699,21 @@ Matrix3d  CConfiguration::realSpcSm( const Vector3d & rij, const bool self, cons
 		v3[n] = (rij(2) + _boxsize * (n-nmax));
 	}
 	for (int n1 = 0; n1 <= maxIter; n1++){
-		
+
 		rn_vec(0) = v1[n1];
 		for (int n2 = 0; n2 <= maxIter; n2++){
-			
+
 			rn_vec(1) = v2[n2];
 		    for (int n3 = 0; n3 <= maxIter; n3++){
-				
-				// CASE n ==(0, 0, 0) and nu == eta 
+
+				// CASE n ==(0, 0, 0) and nu == eta
 				if ((n1==nmax) && (n2==nmax) && (n3==nmax) && self) continue;  // (n1 == nmax) means (n1-nmax == 0) but faster !!
-				else{  
+				else{
 					rn_vec(2) = v3[n3];
 					const double rsq = rn_vec.squaredNorm();
-	                if ( rsq <= r_cutoffsq ){ 
+	                if ( rsq <= r_cutoffsq ){
 						Mreal += realSpcM(rsq, rn_vec, asq);
-						
+
 					}
 				}
 			}
@@ -725,10 +734,10 @@ Matrix3d  CConfiguration::reciprocalSpcSm( const Vector3d & rij, const double as
         for (int n2 = -nkmax; n2 <= nkmax; n2++){
             for (int n3 = -nkmax; n3 <= nkmax; n3++){
 				if (n1 == 0 && n2 == 0 && n3 == 0)  continue;
-				else{ 
+				else{
 	                kvec(0) = n1 * ntok, kvec(1) = n2 * ntok, kvec(2) = n3 * ntok;
 					const double ksq = kvec.squaredNorm();
-                    if ( ksq <= k_cutoffsq ){  
+                    if ( ksq <= k_cutoffsq ){
 						Mreciprocal += reciprocalSpcM(ksq, kvec, asq) * cos((kvec.transpose()* rij));
 					}
 				}
@@ -736,13 +745,12 @@ Matrix3d  CConfiguration::reciprocalSpcSm( const Vector3d & rij, const double as
         }
     }
 
-    return Mreciprocal;   // V is taken care of in reciprocalSpcM 
-        
+    return Mreciprocal;   // V is taken care of in reciprocalSpcM
 }
 
 Matrix3d  CConfiguration::realSpcM(const double & rsq, const Vector3d & rij, const double asq) {
     // Idea: To only account for tracer in one box, leave out eta = eta_tracer in sums entirely or something...
-	Matrix3d  I = Matrix3d::Identity();   
+	Matrix3d  I = Matrix3d::Identity();
     const double r = sqrt(rsq);
 	const double alpha = _alpha;
 	const double alphasq = alpha * alpha;
@@ -753,11 +761,11 @@ Matrix3d  CConfiguration::realSpcM(const double & rsq, const Vector3d & rij, con
 	const double c5 = asq/rsq;
 	const double expc = exp(-c1)/sqrt (M_PI) * alpha;
 	const double erfcc = erfc(alpha * r) / r;
-	
+
 	return _pradius * ( I * ( erfcc *  ( 0.75 + 0.5 * c5 )
 		+ expc * (3. * c1 - 4.5 + asq * ( c2 - 20. * c3 + 14. * alphasq + c4 )))
 			+ (rij*rij.transpose()) / rsq * (
-				erfcc * ( 0.75 - 3. * c5 ) +
+				erfcc * ( 0.75 - 1.5 * c5 ) +
 					expc * ( 1.5 - 3. * c1 + asq * (- c2 + 16. * c3 - 2. * alphasq - 3. * c4))));
 }
 
@@ -767,7 +775,7 @@ Matrix3d  CConfiguration::reciprocalSpcM(const double ksq, const Vector3d & kij,
 	const double alphasq = _alpha * _alpha;
     const double c1 = ksq / ( 4. * alphasq );
 
-	return _pradius * ( 1. - 0.333333 * asq * ksq ) * ( 1. + c1 + 2. * c1 * c1 ) * ( 6. * M_PI / (ksq * _V)) * exp( -c1 ) 
+	return _pradius * ( 1. - 0.333333 * asq * ksq ) * ( 1. + c1 + 2. * c1 * c1 ) * ( 6. * M_PI / (ksq * _V)) * exp( -c1 )
         * ( I - (kij*kij.transpose())/ksq);
 		//alternative way from Brady1988 TODO alt
     // return _pradius  * ( 1. + c1 + 2. * c1 * c1 ) * ( 6. * M_PI / (ksq * V)) * exp( - c1 ) * ( I - (kij*kij.transpose())/ksq);
@@ -804,7 +812,7 @@ Matrix3d  CConfiguration::lubricate( const Vector3d & rij ){
 		    for (int n3 = 0; n3 < 3; n3++) {
 				rn_vec(2) = values_3[n3];
 				const double rsq = rn_vec.squaredNorm();
-                if ( rsq <= _cutofflubSq ){ 
+                if ( rsq <= _cutofflubSq ){
 					if (rsq < _cutofflubSq/2) lubPart += lub2p(rn_vec, rsq, 8);
 					else lubPart += lub2p(rn_vec, rsq, 5);
 				}
@@ -816,10 +824,7 @@ Matrix3d  CConfiguration::lubricate( const Vector3d & rij ){
 
 Matrix3d CConfiguration::lub2p( Vector3d rij, double rsq, unsigned int mmax ){
 	// This function returns the 3x3 lubrication part of the resistance matrix of the tracer particle
-    
-    //If there is particle overlap, set particle surface distance for lubrication to be very small, according to Phung1996
-    if (rsq <= _stericrSq) rsq = _stericrSq + 0.0000000001;
-    
+
 	double s = 2*sqrt(rsq)/(_pradius + _polyrad);
 	// cout << "\ns " << s << endl;
 	double c1 = pow(2/s, 2);
@@ -851,7 +856,7 @@ Matrix3d CConfiguration::lub2p( Vector3d rij, double rsq, unsigned int mmax ){
 
 Matrix3d CConfiguration::CholInvertPart (const MatrixXd A) {
 	MatrixXd I = MatrixXd::Identity(A.rows(),A.rows());
-	
+
 	// make sure partInv is 3x3 matrix and A is NxN with N larger 2
 	assert( A.rows() > 2 );
 	assert( A.rows() == A.cols() );
@@ -872,14 +877,14 @@ Matrix3d CConfiguration::Cholesky3x3(Matrix3d mat){
                            sqrt(mat(i, i) - s) :
                            (1.0 / L(j, j) * (mat(i, j) - s));
         }
- 
+
     return L;
 }
 
-Matrix3d CConfiguration::invert3x3 (const Matrix3d A) { 
+Matrix3d CConfiguration::invert3x3 (const Matrix3d A) {
     //analytical 3x3 matrix inversion - source wikipedia / stackoverflow
     Matrix3d result;
-    
+
     double determinant =    +A(0,0)*(A(1,1)*A(2,2)-A(2,1)*A(1,2))
                             -A(0,1)*(A(1,0)*A(2,2)-A(1,2)*A(2,0))
                             +A(0,2)*(A(1,0)*A(2,1)-A(1,1)*A(2,0));
@@ -948,7 +953,7 @@ void CConfiguration::printHistoMatrix(string folder){
     matrixfile.close();
 }
 
- 
+
 std::vector<double> CConfiguration::getppos(){ // returns pointer to current particle position array
 	std::vector<double> pos (3);
 	for (int i = 0; i < 3; i++){
@@ -968,12 +973,12 @@ double CConfiguration::getDisplacement(){
     for (int i = 0; i < 3; i++){
         d += pow((_timestep * _f_mob(i) + _mu_sto * _f_sto[i]), 2);
     }
-    return sqrt(d); 
+    return sqrt(d);
 } */
 
 void CConfiguration::resetposition(){
     //Reset the position to random (allowed) position in cell.
-    boost::mt19937 rng;    
+    boost::mt19937 rng;
 	boost::uniform_01<boost::mt19937&> zeroone(*m_igen);
 	bool overlap = true;
 	while (overlap == true){
@@ -1141,6 +1146,3 @@ bool CConfiguration::CholInvertPart (const matrix<T>& input, matrix<T>& partInv)
 
 
 */
-
-
-
