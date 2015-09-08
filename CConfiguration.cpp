@@ -78,14 +78,14 @@ CConfiguration::CConfiguration(
 	_g[0] = 2 * pow(lam, 2) * c1;
 	_g[1] = lam/5 * ( 1 + 7*lam + lam*lam ) * c1;
 	_g[2] = 1/42 * ( 1 + lam*(18 - lam*(29 + lam*(18 + lam)))) * c1;
-    _cutofflubSq = pow(7,2)*(pow(_polyrad,2) + pow(_pradius,2));
+    _cutofflubSq = pow(5.*(_polyrad + _pradius),2);
     _stericrSq = pow(_pradius + _polyrad, 2);
 
 
 	// init HI vectors matrices, etc
     // Configurations
-    _n_cellsAlongb = 1;
-    bool EwaldTest = false; // Ewaldtest runs the program with only spheres in the corners of the cells, i.e. one sphere per cell.
+    _n_cellsAlongb = 3;
+    bool EwaldTest = true; // Ewaldtest runs the program with only spheres in the corners of the cells, i.e. one sphere per cell.
     _noEwald = false;       // noEwald to use normal Rotne Prager instead of Ewald summed one
 
     _V = pow( _boxsize, 3 );
@@ -110,7 +110,11 @@ CConfiguration::CConfiguration(
     if ( _boxsize/_n_cellsAlongb != 10 ) cout << "***********************************\n****  WARNING: boxsize b != 10 * n_cell !!!  ****\n***********************************" << endl;
 
 
-
+    // for (int l=0;l<10;l++){
+ //        Vector3d rn_vec = Vector3d::Zero();
+ //        rn_vec(0) = 3 + 0.001 * l;
+ //        cout << rn_vec(0) << "    \n" << lub2p(rn_vec, rn_vec.squaredNorm(), 8) <<"\n -----" << endl ;
+ //    }
 
 
 }
@@ -142,14 +146,14 @@ void CConfiguration::checkDisplacementforMM(){
 Vector3d CConfiguration::midpointScheme(Vector3d V0dt, Vector3d F){
     // Implementation of midpoint scheme according to Banchio2003
     Vector3d ppos_prime;
-    int n = 200;
+    int n = 200000;
     ppos_prime = _ppos + V0dt / n;
 
 	Vector3d vec_rij;
 	Matrix3d lubM = Matrix3d::Zero();
 
 // loop over tracer - particle mobility matrix elements
-	for (unsigned int j = 0; j < 3 * _edgeParticles - 2; j++){
+	for (unsigned int j = 0; j < _polySpheres.size(); j++){
 		vec_rij = ppos_prime - _polySpheres[j].getPosition();
 		lubM += lubricate(vec_rij);
 	}
@@ -162,6 +166,8 @@ Vector3d CConfiguration::midpointScheme(Vector3d V0dt, Vector3d F){
 
     // Note that _f_sto has variance sqrt( _tracerMM ), as it is advised in the paper of Banchio2003
 	Vector3d V_primedt = tracerMM_prime * (F * _timestep + _f_sto * _mu_sto);
+    //cout <<"tracerMM_prime\n" <<  tracerMM_prime << endl; // TODO del
+    //cout <<"V_primedt\n" <<  V_primedt << endl; // TODO del
 
     // return V_drift * dt
     return n/2 * (V_primedt - V0dt);
@@ -169,60 +175,78 @@ Vector3d CConfiguration::midpointScheme(Vector3d V0dt, Vector3d F){
 }
 
 
-void CConfiguration::makeStep(){
+int CConfiguration::makeStep(){
     //move the particle according to the forces and record trajectory like watched by outsider
 //	if (_HI){
-    Vector3d Vdriftdt = Vector3d::Zero();
-    Vector3d V0dt = Vector3d::Zero();
+    _Vdriftdt = Vector3d::Zero();
 
     _prevpos = _ppos;
 
     bool v_nan = true;
-    while (v_nan){  // This loop repeats until the the midpoint scheme does not result in a NaN anymore!
-        V0dt = _tracerMM * (_f_mob * _timestep + _f_sto * _mu_sto);
+    bool lrgDrift = true;
+    while (v_nan || lrgDrift){  // This loop repeats until the the midpoint scheme does not result in a NaN anymore!
+        _V0dt = _tracerMM * (_f_mob * _timestep + _f_sto * _mu_sto);
 
-        if (_HI && !_noLub) Vdriftdt = midpointScheme(V0dt, _f_mob);   //TODO  Enable mid-point-scheme / backflow
-        v_nan = std::isnan(Vdriftdt(0));
-        if (v_nan) {
+        if (_HI && !_noLub) _Vdriftdt = midpointScheme(_V0dt, _f_mob);   //TODO  Enable mid-point-scheme / backflow
+
+        v_nan = std::isnan(_Vdriftdt(0));
+        lrgDrift = (_Vdriftdt.squaredNorm() > 0.3);
+
+        if (v_nan || lrgDrift) {
             calcStochasticForces();
-            //cout << "NaN found" << endl;
+            //cout << "driftCorrection: Vdrift^2 = " << _Vdriftdt.squaredNorm() <<  endl;
         }
     }
 
 	// Update particle position
-	_ppos += (V0dt + Vdriftdt) ;
-    if (std::isnan(_ppos(0))){
-        cout << "NAN position\n" << _f_mob << endl << _f_sto << endl;
-    }
-    //if (_ewaldCorr) _ppos *= _pbc_corr;
+	_ppos += (_V0dt + _Vdriftdt) ;
 
-/*	}
-	else{
-	    for (int i = 0; i < 3; i++){
-	        _prevpos(i) = _ppos(i);
-	        _ppos(i) += _timestep * _f_mob(i) + _mu_sto * _f_sto[i];
-	    }
-	}
-  */
+    //cout << (_prevpos - _ppos).norm() << endl << "--------" << endl;
+    if (std::isnan(_ppos(0))){
+        report("NaN found!");
+        return 1;
+    }
+
+    //if (_V0dt(0) > 0.1 ) cout << "############ " << _V0dt << endl;
+    return 0;
 }
 
-void CConfiguration::checkBoxCrossing(){
+void CConfiguration::report(string reason){
+    cout << "ALERT ALERT ~*~*~*~*~*~ STOPPING EXECUTION !" << endl;
+    cout << "----------------------------------------------------\n-------------------  "<<reason<<"  -------------\n----------------------------------------------------\n";
+    cout << "_ppos: " << _ppos(0) << ", " << _ppos(1) << ", " << _ppos(2) << endl;
+    cout << "_prevpos: " << _prevpos(0) << ", " << _prevpos(1) << ", " << _prevpos(2) << endl;
+    cout << "_tracerMM: " << endl << _tracerMM << endl << " - " << endl;
+    cout << "Vdriftdt:\n" << _Vdriftdt << endl << "V0dt:\n" << _V0dt << endl << " **************** " << endl;
+    cout << "_f_mob\n" << _f_mob << endl << "_f_sto\n" << _f_sto << endl;
+    //cout << "-----mobility Matrix---\n" << _mobilityMatrix << endl;
+    cout << "_resMNoLub:\n" << _resMNoLub << endl;
+    cout << "_RMLub\n" << _RMLub << endl;
+}
+
+int CConfiguration::checkBoxCrossing(){
     //should the particle cross the confinement of the cube, let it appear on the opposite side of the box
     for (int i = 0; i < 3; i++){
         if (_ppos(i) < 0){
             _ppos(i) += _boxsize;
             _boxnumberXYZ[i] -= 1;
-            countWallCrossing(i, -1);
+            //countWallCrossing(i, -1);
             if (_ranU) _poly.shiftPolySign(i, -1);
 
         }
         else if (_ppos(i) > _boxsize){
             _ppos(i) -= _boxsize;
             _boxnumberXYZ[i] += 1;
-            countWallCrossing(i, 1);
+            //countWallCrossing(i, 1);
             if (_ranU) _poly.shiftPolySign(i, 1);
+            if (_ppos(i) > _boxsize){
+                cout << "Error: _ppos is outside of allowed range 0 < _ppos < _boxsize!";
+                report("Invalid _ppos range!");
+                return 1;
+            }
         }
     }
+    return 0;
 }
 
 
@@ -629,16 +653,20 @@ void CConfiguration::calcTracerMobilityMatrix(bool full){
     double rij_sq;
 	Matrix3d lubM = Matrix3d::Zero();
 	Matrix3d muij;
+    double bhalf = _boxsize/2.;
 
 // loop over tracer - particle mobility matrix elements
 	for (unsigned int j = 0; j < _polySpheres.size(); j++){
         vec_rij = _ppos - _polySpheres[j].getPosition();
         rij_sq = vec_rij.squaredNorm();
         if (rij_sq <= _stericrSq){ // If there is overlap between particles, the distance is set to a very small value, according to Brady and Bossis in Phung1996
-            // set distance to 0.00000001 + _stericrSq but preserve direction
+            // set distance to 0.00000001 + _stericr but preserve direction
             double corr = (0.00000001 + sqrt(_stericrSq)) / sqrt(rij_sq);
             vec_rij *= corr;
-            cout << "Overlap!" << vec_rij << endl;
+            if (false){ // Report for debugging
+                cout << "Overlap!\nr_abs_corr = " << vec_rij.norm() << endl;
+                cout << "_ppos:" << endl << _ppos << "\n-------\n _polySpheres[j].getPosition():\n" << _polySpheres[j].getPosition() << endl;
+            }
         }
 
 		if (full){
@@ -665,6 +693,8 @@ void CConfiguration::calcTracerMobilityMatrix(bool full){
 	// Add lubrication Part to tracer Resistance Matrix and invert
     _RMLub = _resMNoLub + lubM;
 	_tracerMM = invert3x3(_RMLub);
+    //cout << _tracerMM << endl << "........................." << endl;
+
     // cout << "tracerMM\n" << _tracerMM << endl;
 //     cout << "inv(tracerMM)\n" << CholInvertPart(_tracerMM) << endl;
 //     cout << "_RMLub\n" << _RMLub << endl;
@@ -689,6 +719,7 @@ Matrix3d  CConfiguration::realSpcSm( const Vector3d & rij, const bool self, cons
     const int nmax = _nmax;
 	int maxIter = 2*nmax;
 	const double r_cutoffsq = _r_cutoffsq;
+    double rsq;
     // TODO nmax !!!
 	Vector3d rn_vec(3);
 	Matrix3d  Mreal = Matrix3d::Zero();
@@ -710,8 +741,12 @@ Matrix3d  CConfiguration::realSpcSm( const Vector3d & rij, const bool self, cons
 				if ((n1==nmax) && (n2==nmax) && (n3==nmax) && self) continue;  // (n1 == nmax) means (n1-nmax == 0) but faster !!
 				else{
 					rn_vec(2) = v3[n3];
-					const double rsq = rn_vec.squaredNorm();
+					rsq = rn_vec.squaredNorm();
 	                if ( rsq <= r_cutoffsq ){
+                        if (rsq <= _stericrSq){ // If there is overlap between particles, the distance is set to a very small value, according to Brady and Bossis in Phung1996
+                            rsq = 0.000000001 + _stericrSq;
+                            //cout << "corrected rsq realSpcSm" << endl;
+                        }
 						Mreal += realSpcM(rsq, rn_vec, asq);
 
 					}
@@ -800,7 +835,7 @@ Matrix3d  CConfiguration::lubricate( const Vector3d & rij ){
 	Matrix3d  lubPart = Matrix3d::Zero();
     // TODO nmax !!!
 	Vector3d rn_vec(3);
-	Matrix3d  Mreal = Matrix3d::Zero();
+    double rsq;
 //     for (int n1 = -1; n1 <= 1; n1++){
     double values_1[3] = {rij(0) - _boxsize, rij(0), rij(0) + _boxsize};
     double values_2[3] = {rij(1) - _boxsize, rij(1), rij(1) + _boxsize};
@@ -811,15 +846,23 @@ Matrix3d  CConfiguration::lubricate( const Vector3d & rij ){
 			rn_vec(1) = values_2[n2];
 		    for (int n3 = 0; n3 < 3; n3++) {
 				rn_vec(2) = values_3[n3];
-				const double rsq = rn_vec.squaredNorm();
+				rsq = rn_vec.squaredNorm();
                 if ( rsq <= _cutofflubSq ){
-					if (rsq < _cutofflubSq/2) lubPart += lub2p(rn_vec, rsq, 8);
+					if (rsq < _cutofflubSq/2){
+                        if (rsq <= 0.00001 + _stericrSq){ // If there is overlap between particles, the distance is set to a very small value, according to Brady and Bossis in Phung1996
+                            //double corr = sqrt((0.0000001 + _stericrSq)/rsq);
+                            rsq = 0.00001 + _stericrSq;
+                            //cout << "######################## correction! ################" << endl;
+                            //rn_vec *= corr;
+                        }
+                        lubPart += lub2p(rn_vec, rsq, 8);
+                    }
 					else lubPart += lub2p(rn_vec, rsq, 5);
 				}
 			}
 		}
 	}
-	return lubPart;
+    return lubPart;
 }
 
 Matrix3d CConfiguration::lub2p( Vector3d rij, double rsq, unsigned int mmax ){
@@ -828,12 +871,13 @@ Matrix3d CConfiguration::lub2p( Vector3d rij, double rsq, unsigned int mmax ){
 	double s = 2*sqrt(rsq)/(_pradius + _polyrad);
 	// cout << "\ns " << s << endl;
 	double c1 = pow(2/s, 2);
+    double c2 = 0;
 	// cout << "c1 " << c1 << endl;
 	double Sum1 = - c1 * ( _g[2] + _g[1] );
 	double Sum2 = c1;
 	// cout << "Sum1: " << Sum1 << " $$$$ Sum2: " << Sum2 << endl;
 	for (int m = 2; m < mmax; m++){
-		double c2 = pow(c1, m);
+		c2 = pow(c1, m);
 		Sum1 += c2/m * ( _g[2]/(m-1) - _g[1]);
 		Sum2 += c2;
 	}
@@ -843,12 +887,13 @@ Matrix3d CConfiguration::lub2p( Vector3d rij, double rsq, unsigned int mmax ){
 	double c4 = ( _g[0]/(1-c1) - _g[0] +  2*c3  +  2*Sum1  +  Sum2 ) / (rsq);
 	Matrix3d lubR = Matrix3d::Identity() * (c3 + Sum1) + rij * rij.transpose() * c4;
 
-	//cout << "\n------- lubR -----" << endl;
-	//cout << lubR << endl;
-	return lubR; // * (_pradius + _polyrad)/(2*_pradius);  // TODO this correction for lubrication normalization is wrong I think
+
+    // if (lubR(0,0) > 1000){
+//         cout << "rsq " << rsq << "  |    mmax " << mmax << endl;
+//         cout << "lubR:\n" << lubR << endl;
+//     }
+	return lubR;
 }
-
-
 
 
 

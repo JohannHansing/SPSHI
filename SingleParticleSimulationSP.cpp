@@ -44,7 +44,7 @@ size_t sizeOfArray( const T(&)[ N ] );
 int main(int argc, const char* argv[]){
 	// measure runtime of the simulation
 	clock_t start, end;
-	
+
     //Main includes the iteration loops for the simulation
 
     //NOTE: so far wallcrossings is added for all runs!!! makes it kind of incorrect, since after each run, ppos is reset.
@@ -60,7 +60,7 @@ int main(int argc, const char* argv[]){
 	bool ranPot = (strcmp(argv[7] , "true") == 0 ) ;
 	bool hpi = (strcmp(argv[8] , "true") == 0 ) ;          // hpi exp
 	int boolpar = 8;
-	
+
 	// Checking for correct structure of input arguments
 	for (int k= 0; k < argc; k++ ) cout << "parameter " << k << " " << argv[k] << endl;
 	for (int b_i=1; b_i<=boolpar; b_i++){
@@ -76,7 +76,7 @@ int main(int argc, const char* argv[]){
     int simtime = atoi( argv[boolpar+3] );                   // simulation time
     int instantvalues = 200;
     unsigned int steps;
-    
+
     double rodDist = atof( argv[boolpar+4] );                //Distance of the rods depending on boxsize. for zero do rodDist[]={0.0}
     double boxsize = atof( argv[boolpar+5] );
     double particlesize = atof( argv[boolpar+6] );
@@ -96,12 +96,11 @@ int main(int argc, const char* argv[]){
 			exit(1);
 		}
 		HI = true;
-		includeSteric = true;
 	}
-	
-	
-	
-	
+
+
+
+
     //MFP
     double fpInt = boxsize/10;
 
@@ -109,19 +108,19 @@ int main(int argc, const char* argv[]){
     //            sizeOfArray(timestep), sizeOfArray(urange), sizeOfArray(ustrength), sizeOfArray(rodDist), sizeOfArray(particlesize), ewaldCorr, includeSteric);
 
 
-    
+
     steps = simtime/timestep;
     saveInt = steps/instantvalues;
     const int trajout = (int)(10/timestep);
     const int MMcalcStep = (int)(0.05/timestep);
-    
-    
+
+
     //initialize instance of configuration
     CConfiguration conf = CConfiguration(timestep, urange, ustrength, boxsize, rodDist, ewaldCorr, particlesize, noLub, includeSteric,
     ranPot, hpi , hpi_u, hpi_k, polymersize);
-        
+
     //Create data folders and print location as string to string "folder"
-    string folder = createDataFolder(resetPos, timestep, simtime, urange, ustrength, boxsize, particlesize, rodDist, ewaldCorr, 
+    string folder = createDataFolder(resetPos, timestep, simtime, urange, ustrength, boxsize, particlesize, rodDist, ewaldCorr,
                                      includeSteric, ranPot, hpi, hpi_u, hpi_k, polymersize, noLub, conf.getTestCue());
 
 
@@ -146,15 +145,15 @@ int main(int argc, const char* argv[]){
     //cout << "Starting Run Number: " << simcounter << " out of " << totalsims << endl;
     start = clock();
     cout << "Starting Simulation!" << endl;
-    
+
     unsigned int stepcount = 0;
     ofstream trajectoryfile;
     trajectoryfile.open((folder + "/Coordinates/trajectory.txt").c_str());
 
     // Write parameter file parameters.txt
-    parameterFile(folder, resetPos, particlesize, boxsize, timestep, runs, steps, ustrength, urange, rodDist, 
+    parameterFile(folder, resetPos, particlesize, boxsize, timestep, runs, steps, ustrength, urange, rodDist,
 	ewaldCorr, recordMFP, includeSteric, ranPot ,hpi, hpi_u, hpi_k, polymersize, noLub, conf.getTestCue());
-    
+
     if (conf.testOverlap()){
         cout << "ERROR !!!!!!!!!!!!!!!!\nThere is an OVERLAP between the polymer network and the particle start position!" << endl;
         return 0;
@@ -163,17 +162,19 @@ int main(int argc, const char* argv[]){
 // ************** START OF RUNS-LOOP *****************
     for (int l = 0; l<runs; l++){
 
-        if (resetPos) conf.resetposition();         
+        if (resetPos) conf.resetposition();
         else conf.updateStartpos();
 
         instValIndex = 0;
         int fpCounter[3] = {0};                  //counter for first passage times (next point to pass first: fpCounter*fpInt
+        int boxcheck = 0; // stores 0 or 1 value for conf.checkBoxCrossing().
+        int stepcheck = 0; // " for conf.makeStep()."
 
         //if (l%100==0) cout << "run " << l << endl;
 
-        for (int i = 0; i < steps; i++){  //calculate stochastic force first, then mobility force!!						
+        for (int i = 0; i < steps; i++){  //calculate stochastic force first, then mobility force!!
             // calc HI mobility matrix here, since it needs to be defined for random force normalisation
-            
+
             if (HI){ // Calculate displacement and update mobilityMatrix if it is larger than 0.1*tracer Radius
                 conf.checkDisplacementforMM();
             }
@@ -218,37 +219,35 @@ int main(int argc, const char* argv[]){
                     }
                 }
             }
-			
-			stepcount++;
-            conf.makeStep();    //move particle at the end of iteration
 
-            
+			stepcount++;
+            stepcheck = conf.makeStep();    //move particle at the end of iteration
+
+
             /* //TODO steric2
             if (includeSteric && conf.testOverlap()) conf.moveBack();
-            else conf.checkBoxCrossing();
+            else boxcheck = conf.checkBoxCrossing();
             */ // end steric2
-            
+
                 //TODO steric
             while (includeSteric && conf.testOverlap()){
                 conf.moveBack();
                 conf.calcStochasticForces();
-                conf.makeStep();
+                stepcheck = conf.makeStep();
             }
-            conf.checkBoxCrossing(); //check if particle has crossed the confinement of the box
+            boxcheck = conf.checkBoxCrossing(); //check if particle has crossed the confinement of the box
             // end steric
-            
 
-            if (std::isnan(conf.getppos()[0])){
-                cout << "NAN position\n" << i << endl;
-                return 0;
-            }
+
+            if (boxcheck==1 || stepcheck==1) return 1; // If boxcrossing is out of range stop program execution!
+
 
             if (stepcount%trajout == 0) {
                 std::vector<double> ppos = conf.getppos();
                 trajectoryfile << fixed << stepcount * timestep << "\t" << ppos[0] << " " << ppos[1] << " " << ppos[2] << endl;
             }
             //if (((i % 5) == 0) && recordPosHisto) conf.addHistoValue();
-            
+
         }
     }//----------END OF RUNS-LOOP ----------------
 
@@ -272,7 +271,7 @@ int main(int argc, const char* argv[]){
     //printReport(resetPos, conf.getwallcrossings(0), conf.getwallcrossings(1), conf.getwallcrossings(2), timestep, urange, ustrength, rodDist, particlesize, runs,
     //        sizeOfArray(timestep), sizeOfArray(urange), sizeOfArray(ustrength), sizeOfArray(rodDist), sizeOfArray(particlesize), ewaldCorr, includeSteric);
 
-    
+
 	cout << "Simulation Finished" << endl;
 	end = clock();
 	double runtime = (double)((end-start)/(CLOCKS_PER_SEC));
@@ -306,7 +305,7 @@ string createDataFolder(bool resetpos, double timestep, double simtime, double p
     sprintf(range, "%.3f", potRange);
     //In the definition of folder, the addition has to START WITH A STRING! for the compiler to know what to do (left to right).
     string folder = "sim_data";
-    if (!resetpos) folder = folder + "/noreset";
+    if (!resetpos) folder = folder + "/noreset"; // /noMidPoint";
     if (!testcue.empty()) folder = folder + "/test/" + testcue;
     if (ewaldCorr) folder = folder +  "/ewaldCorr";
     if (noLub) folder = folder +  "/noLub";
@@ -325,21 +324,22 @@ string createDataFolder(bool resetpos, double timestep, double simtime, double p
     boost::filesystem::create_directories(folder);
     boost::filesystem::create_directory(folder + "/InstantValues");
     boost::filesystem::create_directory(folder + "/Coordinates");
+    cout << "Writing data to folder:\n" << folder << endl;
     return folder;
 }
 
 
-void parameterFile(string folder, bool resetpos, double particlesize, double boxsize, double timestep, double runs, double steps, 
-    double potStrength, double potRange, double rDist, bool ewaldCorr, bool recordMFP, bool steric, bool randomPot, bool hpi, double hpi_u, double hpi_k, 
+void parameterFile(string folder, bool resetpos, double particlesize, double boxsize, double timestep, double runs, double steps,
+    double potStrength, double potRange, double rDist, bool ewaldCorr, bool recordMFP, bool steric, bool randomPot, bool hpi, double hpi_u, double hpi_k,
 	double polymersize, bool noLub, string testcue){
     //Creates a file where the simulation settings are stored
     ofstream parameterFile;
     parameterFile.open((folder + "/parameters.txt").c_str());
-    
+
     // Print time and date
     time_t t = time(0);   // get time now
     struct tm * now = localtime( & t );
-    parameterFile << "date " << (now->tm_year + 1900) << '-' 
+    parameterFile << "date " << (now->tm_year + 1900) << '-'
          << (now->tm_mon + 1) << '-'
          <<  now->tm_mday
          << endl;

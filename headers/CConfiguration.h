@@ -71,6 +71,8 @@ private:
     double _upot;
     Eigen::Vector3d _f_mob;   //store mobility and stochastic force
     Eigen::Vector3d _f_sto;
+    Eigen::Vector3d _Vdriftdt;
+    Eigen::Vector3d _V0dt;
 	
 	//HI Paramters
 	std::vector<CPolySphere> _polySpheres;
@@ -129,6 +131,8 @@ private:
 	Eigen::Matrix3d lubricate( const Eigen::Vector3d & rij );
     Eigen::Vector3d midpointScheme(Eigen::Vector3d V0dt, Eigen::Vector3d F);
     void calcTracerMobilityMatrix(bool full);
+    
+    void report(std::string);
 
     template<typename T>
     string toString(const T& value){
@@ -146,8 +150,8 @@ public:
     void resetParameters(double timestep, double potRange, double potStrength, double boxsize);
     void updateStartpos();
     void resetposition();
-    void makeStep();
-    void checkBoxCrossing();
+    int makeStep();
+    int checkBoxCrossing();
     void calcStochasticForces();
     void calcMobilityForces();
     void saveXYZTraj(string name, const int& move, string a_w);
