@@ -184,17 +184,20 @@ int CConfiguration::makeStep(){
 
     bool v_nan = true;
     bool lrgDrift = true;
+    int tmp  = 0;
     while (v_nan || lrgDrift){  // This loop repeats until the the midpoint scheme does not result in a NaN anymore!
         _V0dt = _tracerMM * (_f_mob * _timestep + _f_sto * _mu_sto);
 
-        if (_HI && !_noLub) _Vdriftdt = midpointScheme(_V0dt, _f_mob);   //TODO  Enable mid-point-scheme / backflow
+        //if (_HI && !_noLub) _Vdriftdt = midpointScheme(_V0dt, _f_mob);   //TODO  Enable mid-point-scheme / backflow
 
         v_nan = std::isnan(_Vdriftdt(0));
         lrgDrift = (_Vdriftdt.squaredNorm() > 0.3);
 
         if (v_nan || lrgDrift) {
             calcStochasticForces();
-            //cout << "driftCorrection: Vdrift^2 = " << _Vdriftdt.squaredNorm() <<  endl;
+            //cout << "drifCorrection: Vdrift^2 = " << _Vdriftdt.squaredNorm() <<  endl;
+            tmp++;
+            cout << tmp << endl;
         }
     }
 
@@ -661,7 +664,7 @@ void CConfiguration::calcTracerMobilityMatrix(bool full){
         rij_sq = vec_rij.squaredNorm();
         if (rij_sq <= _stericrSq){ // If there is overlap between particles, the distance is set to a very small value, according to Brady and Bossis in Phung1996
             // set distance to 0.00000001 + _stericr but preserve direction
-            double corr = (0.00000001 + sqrt(_stericrSq)) / sqrt(rij_sq);
+            double corr = (0.000001 + sqrt(_stericrSq)) / sqrt(rij_sq);
             vec_rij *= corr;
             if (false){ // Report for debugging
                 cout << "Overlap!\nr_abs_corr = " << vec_rij.norm() << endl;
@@ -675,10 +678,15 @@ void CConfiguration::calcTracerMobilityMatrix(bool full){
             if (_noEwald) muij = RotnePrager( vec_rij, asq );
 			else muij = realSpcSm( vec_rij, false, asq ) + reciprocalSpcSm( vec_rij, asq );
 
-			// only lower triangular of symmetric matrix is filled and used
-			_mobilityMatrix.block<3,3>(j_count,0) = muij;
-			_mobilityMatrix.block<3,3>(0,j_count) = muij;
-			//noalias(subrange(_mobilityMatrix, j_count, j_count + 3, 0, 3)) = muij;
+            if (_ewaldCorr){
+                _mobilityMatrix.block<3,3>(j_count,0) = muij;
+    			_mobilityMatrix.block<3,3>(0,j_count) = muij;
+            }
+            else{
+    			// only lower triangular of symmetric matrix is filled and used
+    			_mobilityMatrix.block<3,3>(j_count,0) = RotnePrager( vec_rij, asq );;
+    			_mobilityMatrix.block<3,3>(0,j_count) = muij;
+            }
 		}
 		if (!_noLub ) lubM += lubricate(vec_rij);
 	}

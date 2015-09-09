@@ -305,7 +305,7 @@ string createDataFolder(bool resetpos, double timestep, double simtime, double p
     sprintf(range, "%.3f", potRange);
     //In the definition of folder, the addition has to START WITH A STRING! for the compiler to know what to do (left to right).
     string folder = "sim_data";
-    if (!resetpos) folder = folder + "/noreset"; // /noMidPoint";
+    if (!resetpos) folder = folder + "/noreset/noMidPoint";
     if (!testcue.empty()) folder = folder + "/test/" + testcue;
     if (ewaldCorr) folder = folder +  "/ewaldCorr";
     if (noLub) folder = folder +  "/noLub";
