@@ -26,7 +26,7 @@ string createDataFolder(
         double particlesize, double rDist, bool ewaldCorr, bool steric, bool randomPot, bool hpi, double hpi_u, double hpi_k, double polymersize, bool noLub, string cue);
 void parameterFile(
         string folder, bool respos, double particlesize, double boxsize, double timestep, double runs, double steps,
-        double potStrength, double potRange, double rDist, bool ewaldCorr, bool recordMFP, bool steric, bool randomPot, bool hpi, double hpi_u,
+        double potStrength, double potRange, double rDist, bool ewaldCorr, bool recordPosHisto, bool steric, bool randomPot, bool hpi, double hpi_u,
 		double hpi_k, double polymersize, bool noLub, string cue);
 void parameterFileAppend(string folder, double executiontime);
 
@@ -54,7 +54,7 @@ int main(int argc, const char* argv[]){
     bool writeTrajectory = (strcmp(argv[1] , "true") == 0 ) ;    // relative position TODO
     bool resetPos = (strcmp(argv[2] , "true") == 0 ) ;
     bool ewaldCorr = (strcmp(argv[3] , "true") == 0 ) ;
-    bool recordMFP = (strcmp(argv[4] , "true") == 0 ) ;
+    bool recordPosHisto = (strcmp(argv[4] , "true") == 0 ) ;
     bool noLub = (strcmp(argv[5] , "true") == 0 ) ;
     bool includeSteric = (strcmp(argv[6] , "true") == 0 ) ;  // steric 2
 	bool ranPot = (strcmp(argv[7] , "true") == 0 ) ;
@@ -118,6 +118,7 @@ int main(int argc, const char* argv[]){
     //initialize instance of configuration
     CConfiguration conf = CConfiguration(timestep, urange, ustrength, boxsize, rodDist, ewaldCorr, particlesize, noLub, includeSteric,
     ranPot, hpi , hpi_u, hpi_k, polymersize);
+    if (recordPosHisto) conf.initPosHisto();
 
     //Create data folders and print location as string to string "folder"
     string folder = createDataFolder(resetPos, timestep, simtime, urange, ustrength, boxsize, particlesize, rodDist, ewaldCorr,
@@ -132,8 +133,8 @@ int main(int argc, const char* argv[]){
     //CAverage squareDisp_y = CAverage("squaredisp_y", folder, instantvalues, runs);
     //CAverage squareDisp_z = CAverage("squaredisp_z", folder, instantvalues, runs);
     //CAverage mfp_x = CAverage("mfp_x", folder, 1, 1);
-    CAverage mfp_xyz;
-    if ( recordMFP ) mfp_xyz = CAverage("mfp_xyz", folder, 1, 1);
+    //CAverage mfp_xyz;
+    //if ( recordMFP ) mfp_xyz = CAverage("mfp_xyz", folder, 1, 1);
 
 
 
@@ -152,7 +153,7 @@ int main(int argc, const char* argv[]){
 
     // Write parameter file parameters.txt
     parameterFile(folder, resetPos, particlesize, boxsize, timestep, runs, steps, ustrength, urange, rodDist,
-	ewaldCorr, recordMFP, includeSteric, ranPot ,hpi, hpi_u, hpi_k, polymersize, noLub, conf.getTestCue());
+	ewaldCorr, recordPosHisto, includeSteric, ranPot ,hpi, hpi_u, hpi_k, polymersize, noLub, conf.getTestCue());
 
     if (conf.testOverlap()){
         cout << "ERROR !!!!!!!!!!!!!!!!\nThere is an OVERLAP between the polymer network and the particle start position!" << endl;
@@ -211,14 +212,14 @@ int main(int argc, const char* argv[]){
                 mfp_x.addFPValue(i*timestep, fpCounter);
             }
             */
-            if (recordMFP){
-                for (int a=0; a < 3; a++){
-                    if (conf.checkFirstPassage(fpInt*(fpCounter[a]+1), a)) {
-                        fpCounter[a]+=1;
-                        mfp_xyz.addFPValue(i*timestep, fpCounter[a]);
-                    }
-                }
-            }
+            // if (recordMFP){
+            //     for (int a=0; a < 3; a++){
+            //         if (conf.checkFirstPassage(fpInt*(fpCounter[a]+1), a)) {
+            //             fpCounter[a]+=1;
+            //             mfp_xyz.addFPValue(i*timestep, fpCounter[a]);
+            //         }
+            //     }
+            // }
 
 			stepcount++;
             stepcheck = conf.makeStep();    //move particle at the end of iteration
@@ -246,7 +247,7 @@ int main(int argc, const char* argv[]){
                 std::vector<double> ppos = conf.getppos();
                 trajectoryfile << fixed << stepcount * timestep << "\t" << ppos[0] << " " << ppos[1] << " " << ppos[2] << endl;
             }
-            //if (((i % 5) == 0) && recordPosHisto) conf.addHistoValue();
+            if (recordPosHisto && ((i % 5) == 0)) conf.addHistoValue();
 
         }
     }//----------END OF RUNS-LOOP ----------------
@@ -262,9 +263,9 @@ int main(int argc, const char* argv[]){
     //squareDisp_y.saveAverageInstantValues(saveInt*timestep);
     //squareDisp_z.saveAverageInstantValues(saveInt*timestep);
     //if (recordMFP) mfp_x.saveAverageFPValue(fpInt);
-    if (recordMFP) mfp_xyz.saveAverageFPValue(fpInt);
+    //if (recordMFP) mfp_xyz.saveAverageFPValue(fpInt);
 
-    //if ( recordPosHisto ) conf.printHistoMatrix(folder);
+    if ( recordPosHisto ) conf.printHistoMatrix(folder);
 
 
 
@@ -330,7 +331,7 @@ string createDataFolder(bool resetpos, double timestep, double simtime, double p
 
 
 void parameterFile(string folder, bool resetpos, double particlesize, double boxsize, double timestep, double runs, double steps,
-    double potStrength, double potRange, double rDist, bool ewaldCorr, bool recordMFP, bool steric, bool randomPot, bool hpi, double hpi_u, double hpi_k,
+    double potStrength, double potRange, double rDist, bool ewaldCorr, bool recordPosHisto, bool steric, bool randomPot, bool hpi, double hpi_u, double hpi_k,
 	double polymersize, bool noLub, string testcue){
     //Creates a file where the simulation settings are stored
     ofstream parameterFile;
@@ -349,7 +350,7 @@ void parameterFile(string folder, bool resetpos, double particlesize, double box
     parameterFile << "ResetPos " << resetpos << endl;
     parameterFile << "ewaldCorr " << ewaldCorr << endl;
     parameterFile << "noLub " << noLub << endl;
-    parameterFile << "recordMFP " << recordMFP << endl;
+    parameterFile << "recordPosHisto " << recordPosHisto << endl;
     parameterFile << "steric " << steric << endl;
     parameterFile << "ranPot " << randomPot  << endl;
     parameterFile << "HPI " << hpi  << endl;

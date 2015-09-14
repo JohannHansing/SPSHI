@@ -61,9 +61,10 @@ private:
     double _resetpos;
     Eigen::Vector3d _startpos;          //Stores where the particle starting position was. This is needed to calculate the mean square displacement
     Eigen::Vector3d _prevpos;           //Stores previous particle position before particle is moved.
-    std::vector<std::vector<std::vector<int> > > _posHistoM;
+    //std::vector<std::vector<std::vector<int> > > _posHistoM;
+    int _posHistoM[100][100][100];
     int _min, _max;        // parameters for determining up to which order neighboring rods are considered for the potential
-    
+
     string _testcue;
 
     //Particle parameters
@@ -73,11 +74,11 @@ private:
     Eigen::Vector3d _f_sto;
     Eigen::Vector3d _Vdriftdt;
     Eigen::Vector3d _V0dt;
-	
+
 	//HI Paramters
 	std::vector<CPolySphere> _polySpheres;
 	Eigen::MatrixXd _mobilityMatrix;
-	Eigen::Matrix3d _tracerMM;     
+	Eigen::Matrix3d _tracerMM;
 	Eigen::Matrix3d _resMNoLub;
     Eigen::Matrix3d _RMLub;
 	bool _HI;
@@ -88,8 +89,8 @@ private:
     double _stericrSq;
     int _n_cellsAlongb;
     // LOAD OF CRAP I THINK! This term is a correction for the tracer displacement at every time step due to the repeated tracer particle. It is needed to ensure that the average velocity of all particles in the system is 0. It equals (1-1/N) where N is the number of particles int the simulation box. For reference, see Durlofsky1987a page 3333 - Fundamental solution for flow in porous media and comparison with the Brinkmann equation.
-    //double _pbc_corr; 
-	
+    //double _pbc_corr;
+
 	// Ewald sum parameters
 	int _nmax;
 	int _nkmax;
@@ -97,7 +98,7 @@ private:
 	double _r_cutoffsq;
 	double _k_cutoff;
     bool _noEwald;
-	
+
 	//Lubrication parameters
 	int _mmax;
 	double _g[3];
@@ -116,7 +117,6 @@ private:
     void calculateExpPotential(const double r, double& U, double& Fr);
     void modifyPot(double& U, double& Fr, double dist);
     void calcLJPot(const double r, double &U, double &dU);
-    void initPosHisto();
 	void initConstMobilityMatrix(bool Ewaldtest);
 	Eigen::Matrix3d CholInvertPart (const Eigen::MatrixXd A);
     Eigen::Matrix3d Cholesky3x3(Eigen::Matrix3d mat);
@@ -126,12 +126,12 @@ private:
 	Eigen::Matrix3d realSpcM(const double & rsq, const Eigen::Vector3d & rij, const double asq);
 	Eigen::Matrix3d reciprocalSpcM(const double ksq, const Eigen::Vector3d & kij,  const double asq);
     Eigen::Matrix3d RotnePrager( const Eigen::Vector3d & rij, const double asq);
-	
+
 	Eigen::Matrix3d lub2p( Eigen::Vector3d rij, double rsq, unsigned int mmax );
 	Eigen::Matrix3d lubricate( const Eigen::Vector3d & rij );
     Eigen::Vector3d midpointScheme(Eigen::Vector3d V0dt, Eigen::Vector3d F);
     void calcTracerMobilityMatrix(bool full);
-    
+
     void report(std::string);
 
     template<typename T>
@@ -166,6 +166,7 @@ public:
     bool checkFirstPassage(double mfpPos, int dim);
     bool testOverlap();
     void moveBack();
+    void initPosHisto();
     void addHistoValue();
     void printHistoMatrix(string folder);
     void checkDisplacementforMM();

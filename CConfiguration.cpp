@@ -49,10 +49,6 @@ CConfiguration::CConfiguration(
     }
 
 
-    bool posHisto = false;
-    if (posHisto) initPosHisto();
-
-
     // This is for inclusion of 2nd Order rods if k is 0.2b or larger
     _min = -1, _max = 3;
     if (_ranU || _hpi || (_potRange < 2)){
@@ -84,8 +80,8 @@ CConfiguration::CConfiguration(
 
 	// init HI vectors matrices, etc
     // Configurations
-    _n_cellsAlongb = 3;
-    bool EwaldTest = true; // Ewaldtest runs the program with only spheres in the corners of the cells, i.e. one sphere per cell.
+    _n_cellsAlongb = 1;
+    bool EwaldTest = false; // Ewaldtest runs the program with only spheres in the corners of the cells, i.e. _edgeParticles = 1
     _noEwald = false;       // noEwald to use normal Rotne Prager instead of Ewald summed one
 
     _V = pow( _boxsize, 3 );
@@ -102,7 +98,10 @@ CConfiguration::CConfiguration(
 
     // TEST CUE to modify the directory the output data is written to!!
     _testcue = "";
-    if ( _n_cellsAlongb != 1 ) _testcue = "n" + toString(_n_cellsAlongb);
+    if ( _n_cellsAlongb != 1 ){
+        _testcue = "n" + toString(_n_cellsAlongb);
+        cout << "Running with _edgeParticles = " << _edgeParticles << endl; //<< " --- and _mobilityMatrix.rows() = " <<_mobilityMatrix.rows() << endl;
+    }
     if ( EwaldTest ) _testcue = "EwaldTestn" + toString(_n_cellsAlongb);
     if ( _noEwald ) _testcue = "noEwald";
     if ( _noEwald && EwaldTest ) _testcue = "noEwald/EwaldTestn" + toString(_n_cellsAlongb);
@@ -209,13 +208,14 @@ int CConfiguration::makeStep(){
         report("NaN found!");
         return 1;
     }
+    //report("TEST");
 
     //if (_V0dt(0) > 0.1 ) cout << "############ " << _V0dt << endl;
     return 0;
 }
 
 void CConfiguration::report(string reason){
-    cout << "ALERT ALERT ~*~*~*~*~*~ STOPPING EXECUTION !" << endl;
+    cout << "~*~*~*~*~*~     ALERT ALERT !  ~*~*~*~*~*~" << endl;
     cout << "----------------------------------------------------\n-------------------  "<<reason<<"  -------------\n----------------------------------------------------\n";
     cout << "_ppos: " << _ppos(0) << ", " << _ppos(1) << ", " << _ppos(2) << endl;
     cout << "_prevpos: " << _prevpos(0) << ", " << _prevpos(1) << ", " << _prevpos(2) << endl;
@@ -961,24 +961,24 @@ Matrix3d CConfiguration::invert3x3 (const Matrix3d A) {
 //****************************POS HISTOGRAM****************************************************//
 
 void CConfiguration::initPosHisto(){
-    _posHistoM.resize(100);
     for (int i = 0; i < 100; i++){
-        _posHistoM[i].resize(100);
         for (int j = 0; j < 100; j++){
-            _posHistoM[i][j].resize(100, 0);  //initialize all the 100*100*100 matrix elements to zero!
+            for (int k = 0; k < 100; k++){
+                _posHistoM[i][j][k] = 0;  //initialize all the 100*100*100 matrix elements to zero!
+            }
         }
     }
 }
 
 void CConfiguration::addHistoValue(){
     //adds a value to the position histogram
-    int x = _ppos(0) / _boxsize * 100;     //CAREFUL: THIS CAN'T BE DONE AT A POINT WHERE X MIGHT BE ZERO!!!
-    int y = _ppos(1) / _boxsize * 100;
-    int z = _ppos(2) / _boxsize * 100;
-    if ((x < 0) || (y < 0) || (z < 0) || (x > 99) || (y > 99) || (z > 99)){
-        cout << "The Position Histogram function 'conf.addHisto()' is in a bad place, since there is a negative position _ppos()" << endl;
-        cout << "The current position is: " << _ppos(0) << " " << _ppos(1) << " " << _ppos(2) << endl;
-    }
+    int x = (int)(_ppos(0) / _boxsize * 100);     //CAREFUL: THIS CAN'T BE DONE AT A POINT WHERE X MIGHT BE ZERO!!!
+    int y = (int)(_ppos(1) / _boxsize * 100);
+    int z = (int)(_ppos(2) / _boxsize * 100);
+    // if ((x < 0) || (y < 0) || (z < 0) || (x > 99) || (y > 99) || (z > 99)){
+    //     cout << "The Position Histogram function 'conf.addHisto()' is in a bad place, since there is a negative position _ppos()" << endl;
+    //     cout << "The current position is: " << _ppos(0) << " " << _ppos(1) << " " << _ppos(2) << endl;
+    // }
     _posHistoM[x][y][z] += 1;
 }
 
