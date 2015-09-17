@@ -173,7 +173,16 @@ public:
     string getTestCue(){ return _testcue; };
 
 
-
+    Eigen::Vector3d minImage(Eigen::Vector3d rij){
+        // returns disctance vector with minimal image convention.
+        // For info - Check wikipedia
+        double bhalf = _boxsize/2.;
+        for (int i=0;i<3;i++){
+            if (rij(i) > bhalf)          rij(i) -= _boxsize;
+            else if (rij(i) <= -bhalf)   rij(i) += _boxsize;
+        }
+        return rij;
+    }
 
 
 };

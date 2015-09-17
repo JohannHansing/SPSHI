@@ -250,6 +250,7 @@ int main(int argc, const char* argv[]){
             if (recordPosHisto && ((i % 5) == 0)) conf.addHistoValue();
 
         }
+        if ( recordPosHisto ) conf.printHistoMatrix(folder);
     }//----------END OF RUNS-LOOP ----------------
 
 
@@ -265,7 +266,7 @@ int main(int argc, const char* argv[]){
     //if (recordMFP) mfp_x.saveAverageFPValue(fpInt);
     //if (recordMFP) mfp_xyz.saveAverageFPValue(fpInt);
 
-    if ( recordPosHisto ) conf.printHistoMatrix(folder);
+    //if ( recordPosHisto ) conf.printHistoMatrix(folder);
 
 
 

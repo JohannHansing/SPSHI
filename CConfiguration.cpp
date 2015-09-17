@@ -81,8 +81,8 @@ CConfiguration::CConfiguration(
 	// init HI vectors matrices, etc
     // Configurations
     _n_cellsAlongb = 1;
-    bool EwaldTest = false; // Ewaldtest runs the program with only spheres in the corners of the cells, i.e. _edgeParticles = 1
-    _noEwald = false;       // noEwald to use normal Rotne Prager instead of Ewald summed one
+    bool EwaldTest = true; // Ewaldtest runs the program with only spheres in the corners of the cells, i.e. _edgeParticles = 1
+    _noEwald = true;       // noEwald to use normal Rotne Prager instead of Ewald summed one
 
     _V = pow( _boxsize, 3 );
     _cutoffMMsq = pow(0.05*_boxsize/_n_cellsAlongb,2);
@@ -222,9 +222,10 @@ void CConfiguration::report(string reason){
     cout << "_tracerMM: " << endl << _tracerMM << endl << " - " << endl;
     cout << "Vdriftdt:\n" << _Vdriftdt << endl << "V0dt:\n" << _V0dt << endl << " **************** " << endl;
     cout << "_f_mob\n" << _f_mob << endl << "_f_sto\n" << _f_sto << endl;
-    //cout << "-----mobility Matrix---\n" << _mobilityMatrix << endl;
+    cout << "-----mobility Matrix---\n" << _mobilityMatrix << endl;
     cout << "_resMNoLub:\n" << _resMNoLub << endl;
     cout << "_RMLub\n" << _RMLub << endl;
+    cout << "Cholesky3x3(_RMLub)\n" << Cholesky3x3(_RMLub) << endl;
 }
 
 int CConfiguration::checkBoxCrossing(){
@@ -549,7 +550,6 @@ void CConfiguration::calcLJPot(const double r, double& U, double& Fr){
 void CConfiguration::initConstMobilityMatrix(bool Ewaldtest){
 	double rxi = 0.0, ryi = 0.0, rzi = 0.0;
 	double rij = 0.0, rijsq = 0.0;
-	const double asq = _polyrad * _polyrad;
 
 
 	// store the edgeParticle positions, so that I can simply loop through them later
@@ -595,13 +595,13 @@ void CConfiguration::initConstMobilityMatrix(bool Ewaldtest){
     // Eigen-vector for interparticle distance. Needs to initialized as zero vector for self mobilities.
 	Vector3d vec_rij = Vector3d::Zero();
 
-	// on-diagonal elements of mobility matrix: Tracer first
+	// on-diagonal elements of mobility matrix: TRACER PARTICLE
     Matrix3d selfmob = realSpcSm( vec_rij, true, _pradius * _pradius ) + reciprocalSpcSm( vec_rij, _pradius * _pradius );
     double self_plus = 1. + _pradius / sqrt (M_PI) * ( - 6. * _alpha + 40. * pow(_alpha,3) * _pradius * _pradius / 3. );
+	if (_ewaldCorr && !_noEwald) _mobilityMatrix.block<3,3>(0,0) = selfmob + Matrix3d::Identity() * self_plus; // ewaldCorr
 
-	if (_ewaldCorr) _mobilityMatrix.block<3,3>(0,0) = selfmob + Matrix3d::Identity() * self_plus; // ewaldCorr
-
-	// now on diagonals for edgeparticles
+	// now on diagonals for POLYMER SPHERES
+	const double asq = _polyrad * _polyrad;
 	selfmob = realSpcSm( vec_rij, true, asq ) + reciprocalSpcSm( vec_rij, asq );
     // double self_plus = _pradius/_polyrad + _pradius / sqrt (M_PI) * ( - 6. * _alpha );  //TODO  alt
 	self_plus = _pradius/_polyrad + _pradius / sqrt (M_PI) * ( - 6. * _alpha + 40. * pow(_alpha,3) * _polyrad * _polyrad / 3. );
@@ -632,7 +632,7 @@ void CConfiguration::initConstMobilityMatrix(bool Ewaldtest){
 		 * Calculation of RP Ewald sum
 		 */
 	        Matrix3d muij = Matrix3d::Zero();
-            if (_noEwald) muij = RotnePrager( vec_rij, asq );
+            if (_noEwald) muij = RotnePrager( minImage(vec_rij), asq );
             else muij = realSpcSm( vec_rij, false, asq ) + reciprocalSpcSm( vec_rij, asq );
 	//		cout << vec_rij << endl;
 	//		cout << muij << endl; // TODO del
@@ -661,15 +661,12 @@ void CConfiguration::calcTracerMobilityMatrix(bool full){
 // loop over tracer - particle mobility matrix elements
 	for (unsigned int j = 0; j < _polySpheres.size(); j++){
         vec_rij = _ppos - _polySpheres[j].getPosition();
+        if (_noEwald) vec_rij = minImage(vec_rij);
         rij_sq = vec_rij.squaredNorm();
-        if (rij_sq <= _stericrSq){ // If there is overlap between particles, the distance is set to a very small value, according to Brady and Bossis in Phung1996
+        if (rij_sq <= (_stericrSq + 0.000001)){ // If there is overlap between particles, the distance is set to a very small value, according to Brady and Bossis in Phung1996
             // set distance to 0.00000001 + _stericr but preserve direction
             double corr = (0.000001 + sqrt(_stericrSq)) / sqrt(rij_sq);
             vec_rij *= corr;
-            if (false){ // Report for debugging
-                cout << "Overlap!\nr_abs_corr = " << vec_rij.norm() << endl;
-                cout << "_ppos:" << endl << _ppos << "\n-------\n _polySpheres[j].getPosition():\n" << _polySpheres[j].getPosition() << endl;
-            }
         }
 
 		if (full){
@@ -678,7 +675,7 @@ void CConfiguration::calcTracerMobilityMatrix(bool full){
             if (_noEwald) muij = RotnePrager( vec_rij, asq );
 			else muij = realSpcSm( vec_rij, false, asq ) + reciprocalSpcSm( vec_rij, asq );
 
-            if (_ewaldCorr){
+            if (_ewaldCorr || _noEwald){
                 _mobilityMatrix.block<3,3>(j_count,0) = muij;
     			_mobilityMatrix.block<3,3>(0,j_count) = muij;
             }
@@ -832,7 +829,7 @@ Matrix3d CConfiguration::RotnePrager(const Vector3d & rij, const double asq) {
     const double r = sqrt(rsq);
 
 
-    return _pradius * 3 / ( 4 * r ) * ( ( 1 + asq / (3 * rsq )) * I + ( 1 - asq / rsq ) * rij*rij.transpose() / rsq );
+    return _pradius * 3. / ( 4 * r ) * ( ( 1. + 2. * asq / (3. * rsq )) * I + ( 1. - 2.* asq / rsq ) * rij*rij.transpose() / rsq );
 }
 
 
