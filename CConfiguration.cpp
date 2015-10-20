@@ -81,17 +81,20 @@ CConfiguration::CConfiguration(
 	// init HI vectors matrices, etc
     // Configurations
     _n_cellsAlongb = 1;
-    bool EwaldTest = true; // Ewaldtest runs the program with only spheres in the corners of the cells, i.e. _edgeParticles = 1
-    _noEwald = true;       // noEwald to use normal Rotne Prager instead of Ewald summed one
+    int EwaldTest = 3; // Predefine _edgeParticles. Ewaldtest = 1 runs the program with only spheres in the corners of the cells, i.e. _edgeParticles = 1, EwaldTest = 2 with 2 edgeparticles, and so on
+    _noEwald = false;       // noEwald to use normal Rotne Prager instead of Ewald summed one
 
     _V = pow( _boxsize, 3 );
-    _cutoffMMsq = pow(0.05*_boxsize/_n_cellsAlongb,2);
+    _cutoffMMsq = pow(0.025*_boxsize/_n_cellsAlongb,2);
     if (polymersize != 0) _HI = true;
 	if (_HI) {
-		_edgeParticles = (int) ( ( _boxsize/_n_cellsAlongb )/polymersize + 0.001);
+        if (EwaldTest != 0) _edgeParticles = EwaldTest;
+		else _edgeParticles = (int) ( ( _boxsize/_n_cellsAlongb )/polymersize + 0.001);
 		_LJPot = false;
+        double x = _boxsize/_n_cellsAlongb/2;
+        _ppos << x, x, x;
         // THIS NEEDS TO COME LAST !!!!!!!
-		initConstMobilityMatrix(EwaldTest);
+		initConstMobilityMatrix();
 		calcTracerMobilityMatrix(true);
         //_pbc_corr = 1 - 1/(_polySpheres.size()+1); // assign system size dependent value to pbc correction for tracer displacement in porous medium
 	}
@@ -99,12 +102,12 @@ CConfiguration::CConfiguration(
     // TEST CUE to modify the directory the output data is written to!!
     _testcue = "";
     if ( _n_cellsAlongb != 1 ){
-        _testcue = "n" + toString(_n_cellsAlongb);
-        cout << "Running with _edgeParticles = " << _edgeParticles << endl; //<< " --- and _mobilityMatrix.rows() = " <<_mobilityMatrix.rows() << endl;
+        _testcue = "/n" + toString(_n_cellsAlongb);
+        cout << "Forcing _edgeParticles = " << _edgeParticles << endl; //<< " --- and _mobilityMatrix.rows() = " <<_mobilityMatrix.rows() << endl;
     }
-    if ( EwaldTest ) _testcue = "EwaldTestn" + toString(_n_cellsAlongb);
-    if ( _noEwald ) _testcue = "noEwald";
-    if ( _noEwald && EwaldTest ) _testcue = "noEwald/EwaldTestn" + toString(_n_cellsAlongb);
+    if ( _noEwald ) _testcue += "/noEwald";
+    if ( EwaldTest == 1 ) _testcue += "/EwaldTest";
+    if ( EwaldTest > 1 ) _testcue += "/EwaldTest" + toString(EwaldTest);
     if (!_testcue.empty()) cout << "***********************************\n****  WARNING: String '_testcue' is not empty   ****\n***********************************" << endl;
     if ( _boxsize/_n_cellsAlongb != 10 ) cout << "***********************************\n****  WARNING: boxsize b != 10 * n_cell !!!  ****\n***********************************" << endl;
 
@@ -138,7 +141,7 @@ void CConfiguration::checkDisplacementforMM(){
         _lastcheck[1] = _ppos(1) + _boxsize *  _boxnumberXYZ[1];
         _lastcheck[2] = _ppos(2) + _boxsize *  _boxnumberXYZ[2];
     }
-	else calcTracerMobilityMatrix(false);
+	else calcTracerMobilityMatrix(false); //TODO fullMM: set to true
 
 }
 
@@ -187,7 +190,7 @@ int CConfiguration::makeStep(){
     while (v_nan || lrgDrift){  // This loop repeats until the the midpoint scheme does not result in a NaN anymore!
         _V0dt = _tracerMM * (_f_mob * _timestep + _f_sto * _mu_sto);
 
-        //if (_HI && !_noLub) _Vdriftdt = midpointScheme(_V0dt, _f_mob);   //TODO  Enable mid-point-scheme / backflow
+        if (_HI && !_noLub) _Vdriftdt = midpointScheme(_V0dt, _f_mob);   //TODO  Enable mid-point-scheme / backflow
 
         v_nan = std::isnan(_Vdriftdt(0));
         lrgDrift = (_Vdriftdt.squaredNorm() > 0.3);
@@ -547,7 +550,7 @@ void CConfiguration::calcLJPot(const double r, double& U, double& Fr){
 
 //**************************** HYDRODYNAMICS ****************************************************//
 
-void CConfiguration::initConstMobilityMatrix(bool Ewaldtest){
+void CConfiguration::initConstMobilityMatrix(){
 	double rxi = 0.0, ryi = 0.0, rzi = 0.0;
 	double rij = 0.0, rijsq = 0.0;
 
@@ -569,24 +572,12 @@ void CConfiguration::initConstMobilityMatrix(bool Ewaldtest){
                 nvec << nx, ny, nz; // Position of 0 corner of the simulation box
                 for (unsigned int i = 0; i < zeroPos.size(); i++){
                     _polySpheres.push_back( CPolySphere( zeroPos[i] + nvec * _boxsize/_n_cellsAlongb, _startpos ) );
+                    //cout << "----" << _polySpheres[i].getPosition() << endl;
             	}
             }
         }
 	}
 
-    // Ewaldtest runs the program with only spheres in the corners of the cells, i.e. one sphere per cell.
-    if (Ewaldtest){
-        _polySpheres.clear();
-        _edgeParticles = 1;
-    	for (int nx=0; nx < _n_cellsAlongb; nx++){
-    	    for (int ny=0; ny < _n_cellsAlongb; ny++){
-                for (int nz=0; nz < _n_cellsAlongb; nz++){
-                    nvec << nx, ny, nz; // Position of 0 corner of the simulation box
-                    _polySpheres.push_back( CPolySphere(  nvec * _boxsize/_n_cellsAlongb, _startpos ) );
-                }
-            }
-    	}
-    }
 
 	// create mobility matrix - Some elements remain constant throughout the simulation. Those are stored here.
 	_mobilityMatrix = MatrixXd::Identity( 3 * (_polySpheres.size() + 1) , 3 * (_polySpheres.size() + 1) );
@@ -662,6 +653,7 @@ void CConfiguration::calcTracerMobilityMatrix(bool full){
 	for (unsigned int j = 0; j < _polySpheres.size(); j++){
         vec_rij = _ppos - _polySpheres[j].getPosition();
         if (_noEwald) vec_rij = minImage(vec_rij);
+        //vec_rij = minImage(vec_rij); // tmpminim
         rij_sq = vec_rij.squaredNorm();
         if (rij_sq <= (_stericrSq + 0.000001)){ // If there is overlap between particles, the distance is set to a very small value, according to Brady and Bossis in Phung1996
             // set distance to 0.00000001 + _stericr but preserve direction
@@ -693,7 +685,8 @@ void CConfiguration::calcTracerMobilityMatrix(bool full){
 	// create resistance matrix - Some elements remain constant throughout the simulation. Those are stored here.
 	if (full){
 		 _resMNoLub = CholInvertPart(_mobilityMatrix);
-         //cout << "$$$$$$$ _resMNoLub $$$$$$$$$\n" << _resMNoLub << endl;
+          //_resMNoLub = _mobilityMatrix.inverse().block<3,3>(0,0);
+         //cout << "$$$$$$$ _resMNoLub $$$$$$$$$\n" << _resMNoLub  << endl;
 	}
 	// Add lubrication Part to tracer Resistance Matrix and invert
     _RMLub = _resMNoLub + lubM;
@@ -748,8 +741,8 @@ Matrix3d  CConfiguration::realSpcSm( const Vector3d & rij, const bool self, cons
 					rn_vec(2) = v3[n3];
 					rsq = rn_vec.squaredNorm();
 	                if ( rsq <= r_cutoffsq ){
-                        if (rsq <= _stericrSq){ // If there is overlap between particles, the distance is set to a very small value, according to Brady and Bossis in Phung1996
-                            rsq = 0.000000001 + _stericrSq;
+                        if (rsq <= _stericrSq + 0.000001){ // If there is overlap between particles, the distance is set to a very small value, according to Brady and Bossis in Phung1996
+                            rsq = 0.000001 + _stericrSq;
                             //cout << "corrected rsq realSpcSm" << endl;
                         }
 						Mreal += realSpcM(rsq, rn_vec, asq);
@@ -912,7 +905,9 @@ Matrix3d CConfiguration::CholInvertPart (const MatrixXd A) {
 	assert( A.rows() == A.cols() );
 
     // perform inversion by cholesky decompoposition and return upper left 3x3 block
-    return A.ldlt().solve(I).block<3,3>(0,0);
+    // The following expression means: solve the system of linear equations A * x = I with the LLT method. x is then the inverse of A!
+    // Check http://eigen.tuxfamily.org/dox/group__TutorialLinearAlgebra.html for comparison!
+    return A.llt().solve(I).block<3,3>(0,0);
 }
 
 Matrix3d CConfiguration::Cholesky3x3(Matrix3d mat){

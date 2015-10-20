@@ -117,7 +117,7 @@ private:
     void calculateExpPotential(const double r, double& U, double& Fr);
     void modifyPot(double& U, double& Fr, double dist);
     void calcLJPot(const double r, double &U, double &dU);
-	void initConstMobilityMatrix(bool Ewaldtest);
+	void initConstMobilityMatrix();
 	Eigen::Matrix3d CholInvertPart (const Eigen::MatrixXd A);
     Eigen::Matrix3d Cholesky3x3(Eigen::Matrix3d mat);
     Eigen::Matrix3d invert3x3 (const Eigen::Matrix3d A);
