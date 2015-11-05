@@ -1,0 +1,13 @@
+#gnuplot#
+SingleParticleSim
+write_sheldon_scripts.sh
+sim_data/
+jobs/
+.DS_Store
+Code_Mille
+CConfiguration_old.cpp
+CMakeLists.txt
+Debug/
+Release/
+oldCode/
+tmp_pls delete/

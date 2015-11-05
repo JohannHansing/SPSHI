@@ -160,9 +160,9 @@ int main(int argc, const char* argv[]){
     parameterFile(folder, resetPos, particlesize, boxsize, timestep, runs, steps, ustrength, urange, rodDist,
 	ewaldCorr, recordPosHisto, includeSteric, ranPot ,hpi, hpi_u, hpi_k, polymersize, noLub, conf.getTestCue());
 
-    if (conf.testOverlap()){
+    if (includeSteric && conf.testOverlap()){
         cout << "ERROR !!!!!!!!!!!!!!!!\nThere is an OVERLAP between the polymer network and the particle start position!" << endl;
-        return 0;
+        return 1;
     }
 
 // ************** START OF RUNS-LOOP *****************

@@ -74,7 +74,7 @@ CConfiguration::CConfiguration(
 	_g[0] = 2 * pow(lam, 2) * c1;
 	_g[1] = lam/5 * ( 1 + 7*lam + lam*lam ) * c1;
 	_g[2] = 1/42 * ( 1 + lam*(18 - lam*(29 + lam*(18 + lam)))) * c1;
-    _cutofflubSq = pow(5.*(_polyrad + _pradius),2);
+    _cutofflubSq = pow(7.*(_polyrad + _pradius),2);
     _stericrSq = pow(_pradius + _polyrad, 2);
 
 
