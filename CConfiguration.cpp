@@ -80,15 +80,15 @@ CConfiguration::CConfiguration(
 
 	// init HI vectors matrices, etc
     // Configurations
-    _n_cellsAlongb = 1;
-    int EwaldTest = 3; // Predefine _edgeParticles. Ewaldtest = 1 runs the program with only spheres in the corners of the cells, i.e. _edgeParticles = 1, EwaldTest = 2 with 2 edgeparticles, and so on
+    _n_cellsAlongb = 3;
+    _EwaldTest = 1; // Predefine _edgeParticles. EwaldTest = 0 is normal mode. Ewaldtest = 1 runs the program with only spheres in the corners of the cells, i.e. _edgeParticles = 1, EwaldTest = 2 with 2 edgeparticles, and so on
     _noEwald = false;       // noEwald to use normal Rotne Prager instead of Ewald summed one
 
     _V = pow( _boxsize, 3 );
-    _cutoffMMsq = pow(0.025*_boxsize/_n_cellsAlongb,2);
+    _cutoffMMsq = pow(0.05*_boxsize/_n_cellsAlongb,2);
     if (polymersize != 0) _HI = true;
 	if (_HI) {
-        if (EwaldTest != 0) _edgeParticles = EwaldTest;
+        if (_EwaldTest != 0) _edgeParticles = _EwaldTest;
 		else _edgeParticles = (int) ( ( _boxsize/_n_cellsAlongb )/polymersize + 0.001);
 		_LJPot = false;
         double x = _boxsize/_n_cellsAlongb/2;
@@ -106,8 +106,8 @@ CConfiguration::CConfiguration(
         cout << "Forcing _edgeParticles = " << _edgeParticles << endl; //<< " --- and _mobilityMatrix.rows() = " <<_mobilityMatrix.rows() << endl;
     }
     if ( _noEwald ) _testcue += "/noEwald";
-    if ( EwaldTest == 1 ) _testcue += "/EwaldTest";
-    if ( EwaldTest > 1 ) _testcue += "/EwaldTest" + toString(EwaldTest);
+    if ( _EwaldTest == 1 ) _testcue += "/EwaldTest";
+    if ( _EwaldTest > 1 ) _testcue += "/EwaldTest" + toString(_EwaldTest);
     if (!_testcue.empty()) cout << "***********************************\n****  WARNING: String '_testcue' is not empty   ****\n***********************************" << endl;
     if ( _boxsize/_n_cellsAlongb != 10 ) cout << "***********************************\n****  WARNING: boxsize b != 10 * n_cell !!!  ****\n***********************************" << endl;
 
@@ -473,7 +473,6 @@ void CConfiguration::modifyPot(double& U, double& Fr, double dist){
 bool CConfiguration::testOverlap(){
     //Function to check, whether the diffusing particle of size psize is overlapping with any one of the rods (edges of the box)
     //mostly borrowed from moveParticleAndWatch()
-    bool overlaps = false;
 
     // for (unsigned int i=0; i < _polySpheres.size(); i++ ){
 //         // First update tracer position in Polysphere class instances to
@@ -486,29 +485,20 @@ bool CConfiguration::testOverlap(){
 //     return overlaps;
 
 
-    // "PROPER" METHOD FOR EwaldTest, where the overlap is calculated for spheres in the corners, not rods.
-    // Vector3d r_ij;
-//     if (Ewaldtest){
-//         for (int nx = 0; nx <= _n_cellsAlongb; nx++ ){
-//             r_ij(0) = _ppos(0) -  cellwidth * nx;
-//             for (int ny = 0; ny <= _n_cellsAlongb; ny++ ){
-//                 r_ij(1) = _ppos(1) -  cellwidth * ny;
-//                 for (int nz = 0; nz <= _n_cellsAlongb; nz++ ){
-//                     r_ij(2) = _ppos(2) -  cellwidth * nz;
-//                     if (r_ij.squaredNorm() <= _stericrSq){
-//                         overlaps = true;
-//                         return overlaps;
-//                     }
-//                     if (overlaps == true) continue;
-//                 }
-//                 if (overlaps == true) continue;
-//             }
-//             if (overlaps == true) continue;
-//         }
-//     }
+    //"PROPER" METHOD FOR EwaldTest, where the overlap is calculated for spheres in the corners, not rods.
+    if (_noLub &&  (_EwaldTest != 0)){
+        Vector3d vrij;
+        for (unsigned int j = 0; j < _polySpheres.size(); j++){
+            vrij = minImage(_ppos - _polySpheres[j].getPosition());
+            if (vrij.squaredNorm() <= _stericrSq + 0.00001){
+                return true;
+            }
+        }
+        return false;
+    }
 
-    // KEEP THIS TO MAYBE IMPLEMENT MORE EFFICIENT testOVERLAP
-    // --> store cell of tracerparticle and adjust to L1 and L2
+
+
 
     double r_i = 0, r_k = 0;
     double r_sq = 0;
@@ -527,17 +517,14 @@ bool CConfiguration::testOverlap(){
                         if (i == 0) r_k -= _rodDistance;
                     }
                     r_sq = r_i * r_i + r_k * r_k; //distance to the rods
-                    if (r_sq <= _stericrSq){
-                        overlaps = true;
-                        return overlaps;
+                    if (r_sq <= _stericrSq + 0.00001){
+                        return true;
                     }
                 }
             }
-            if (overlaps == true) continue;
         }
-        if (overlaps == true) continue;
     }
-    return overlaps;
+    return false;
 }
 
 
