@@ -226,7 +226,6 @@ int main(int argc, const char* argv[]){
             //     }
             // }
 
-			stepcount++;
             stepcheck = conf.makeStep();    //move particle at the end of iteration
 
 
@@ -247,7 +246,7 @@ int main(int argc, const char* argv[]){
 
             if (boxcheck==1 || stepcheck==1) return 1; // If boxcrossing is out of range stop program execution!
 
-
+            stepcount++;
             if (stepcount%trajout == 0) {
                 std::vector<double> ppos = conf.getppos();
                 trajectoryfile << fixed << stepcount * timestep << "\t" << ppos[0] << " " << ppos[1] << " " << ppos[2] << endl;

@@ -103,6 +103,8 @@ private:
 	//Lubrication parameters
 	int _mmax;
 	double _g[3];
+    std::vector<double> _fXm;
+    std::vector<double> _fYm;
     double _cutofflubSq;
     double _V;
 
@@ -141,6 +143,8 @@ private:
         oss << value;
         return oss.str();
     }
+
+
 
 
 public:
@@ -185,6 +189,49 @@ public:
         return rij;
     }
 
+private:
+    void initLubStuff(){
+        const double lam = _polyrad/_pradius;
+        const double c1 = pow(1+lam, -3);
+
+        _g[0] = 2 * pow(lam, 2) * c1;
+        _g[1] = lam/5 * ( 1 + 7*lam + lam*lam ) * c1;
+        _g[2] = 1/42 * ( 1 + lam*(18 - lam*(29 + lam*(18 + lam)))) * c1;
+
+        double lampow[11];
+        for (int i=0;i<11;i++){
+            lampow[i] = pow(lam,i);
+        }
+
+        double f0 = 1;
+        double f1 = 3*lam;
+        double f2 = 9*lam;
+        double f3 = -4*lam+27*lampow[2]-4*lampow[3];
+        double f4 = -24*lam + 81*lampow[2] + 36*lampow[3];
+        double f5 = 72*lampow[2] + 243*lampow[3] + 72*lampow[4];
+        double f6 = 16*lam + 108*lampow[2]+ 281*lampow[3] + 648*lampow[4]+ 144*lampow[5];
+        double f7 = 1;
+        double f8 = 576*lampow[2] + 4848*lampow[3]+ 5409*lampow[4] + 4524*lampow[5] + 3888*lampow[6]+ 576*lampow[7];
+        double f9 = 1;
+        double f10 = 2304*lampow[2] + 20736*lampow[3]+ 42804*lampow[4]+ 115849*lampow[5]+ 76176*lampow[6] + 39264*lampow[7]+ 20736*lampow[8] + 2304*lampow[9];
+        // THe next bit looks ugly but I did it like this for a reason: http://stackoverflow.com/questions/259297/how-do-you-copy-the-contents-of-an-array-to-a-stdvector-in-c-without-looping
+        const double tmpArrX[] =  {f0,f2,f4,f6,f8,f10};
+        unsigned ArrSize = 6;
+        _fXm.insert(_fXm.end(), &tmpArrX[0], &tmpArrX[ArrSize]);
+
+        double fy0 = 1;
+        double fy2 = 9/4*lam;
+        double fy4 = 6*lam+81/16*lampow[2]+ 18*lampow[3];
+        double fy6 = 4*lam + 54*lampow[2]+ 1241/64 *lampow[3 ]+ 81*lampow[4] + 72*lampow[5];
+        double fy8 = 279*lampow[2] + 4261/8*lampow[3] + 126369/256*lampow[4] - 117/8*lampow[5] + 648*lampow[6] + 288*lampow[7];
+        double fy10 = 1152*lampow[2] +7857/4*lampow[3] +9487/16*lampow[4] + 10548393/1024*lampow[5] +67617/8*lampow[6] - 351/2*lampow[7 ]+ 3888*lampow[8] + 1152*lampow[9];
+        const double tmpArrY[] =  {fy0,fy2,fy4,fy6,fy8,fy10};
+        _fYm.insert(_fYm.end(), &tmpArrY[0], &tmpArrY[ArrSize]);
+        for (int i=0; i<ArrSize; i++){
+            _fYm[i] /= pow((1+lam),i);
+            _fXm[i] /= pow((1+lam),i);
+        }
+    }
 
 };
 

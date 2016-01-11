@@ -69,11 +69,7 @@ CConfiguration::CConfiguration(
 	_r_cutoffsq = pow(_nmax * _boxsize, 2);   // Like Jain2012, r_cutoff is chosen such that exp(-(r_cutoff * alpha)^2) is small
 
 	// lubrication stuff
-	const double lam = polymersize/psize;
-	const double c1 = pow(1+lam, -3);
-	_g[0] = 2 * pow(lam, 2) * c1;
-	_g[1] = lam/5 * ( 1 + 7*lam + lam*lam ) * c1;
-	_g[2] = 1/42 * ( 1 + lam*(18 - lam*(29 + lam*(18 + lam)))) * c1;
+    initLubStuff();
     _cutofflubSq = pow(7.*(_polyrad + _pradius),2);
     _stericrSq = pow(_pradius + _polyrad, 2);
 
@@ -851,26 +847,37 @@ Matrix3d  CConfiguration::lubricate( const Vector3d & rij ){
 }
 
 Matrix3d CConfiguration::lub2p( Vector3d rij, double rsq, unsigned int mmax ){
-	// This function returns the 3x3 lubrication part of the resistance matrix of the tracer particle
+	// This function returns the 3x3 SELF-lubrication part of the resistance matrix of the tracer particle, i.e. A_{11} in Jeffrey1984
 
 	double s = 2*sqrt(rsq)/(_pradius + _polyrad);
 	// cout << "\ns " << s << endl;
 	double c1 = pow(2/s, 2);
-    double c2 = 0;
+    double c1pows[mmax];
+    c1pows[0] = 1;
+    for (int m = 1; m < mmax; m++){
+        c1pows[m] = c1 * c1pows[m-1];
+    }
 	// cout << "c1 " << c1 << endl;
 	double Sum1 = - c1 * ( _g[2] + _g[1] );
 	double Sum2 = c1;
 	// cout << "Sum1: " << Sum1 << " $$$$ Sum2: " << Sum2 << endl;
 	for (int m = 2; m < mmax; m++){
-		c2 = pow(c1, m);
-		Sum1 += c2/m * ( _g[2]/(m-1) - _g[1]);
-		Sum2 += c2;
+		Sum1 += c1pows[m]/m * ( _g[2]/(m-1) - _g[1]);
+		Sum2 += c1pows[m];
 	}
 	Sum2 = Sum2 * _g[0];
 	// cout << "Sum1: " << Sum1 << " $$$$ Sum2: " << Sum2 << endl;
 	double c3 = - ( _g[1] + _g[2] * ( 1 - c1 ) ) * log( 1 - c1 );
-	double c4 = ( _g[0]/(1-c1) - _g[0] +  2*c3  +  2*Sum1  +  Sum2 ) / (rsq);
-	Matrix3d lubR = Matrix3d::Identity() * (c3 + Sum1) + rij * rij.transpose() * c4;
+	double c4 = ( _g[0]/(1-c1) - _g[0] +  2*c3  +  2*Sum1  +  Sum2 ) ;
+
+    // Long-Range part added 07.01.2016
+    double Sum3 = 0, Sum4 = 0;
+    for (int m = 1; m < _fXm.size(); m++){
+        Sum3 += c1pows[m] * _fYm[m];
+        Sum4 += c1pows[m] * _fXm[m];
+    }
+    // End Long-Range part
+	Matrix3d lubR = Matrix3d::Identity() * (c3 + Sum1 + Sum3) + rij * rij.transpose() / rsq * ( c4 + Sum4 - Sum3 );
 
 
     // if (lubR(0,0) > 1000){
