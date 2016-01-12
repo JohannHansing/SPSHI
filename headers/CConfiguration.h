@@ -64,6 +64,7 @@ private:
     //std::vector<std::vector<std::vector<int> > > _posHistoM;
     int _posHistoM[100][100][100];
     int _min, _max;        // parameters for determining up to which order neighboring rods are considered for the potential
+    int _EwaldTest;
 
     string _testcue;
 
