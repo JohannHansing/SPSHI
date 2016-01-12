@@ -129,7 +129,7 @@ private:
 	Eigen::Matrix3d reciprocalSpcM(const double ksq, const Eigen::Vector3d & kij,  const double asq);
     Eigen::Matrix3d RotnePrager( const Eigen::Vector3d & rij, const double asq);
 
-	Eigen::Matrix3d lub2p( Eigen::Vector3d rij, double rsq, unsigned int mmax );
+	Eigen::Matrix3d lub2p( Eigen::Vector3d rij, double rsq );
 	Eigen::Matrix3d lubricate( const Eigen::Vector3d & rij );
     Eigen::Vector3d midpointScheme(Eigen::Vector3d V0dt, Eigen::Vector3d F);
     void calcTracerMobilityMatrix(bool full);
@@ -227,8 +227,10 @@ private:
         const double tmpArrY[] =  {fy0,fy2,fy4,fy6,fy8,fy10};
         _fYm.insert(_fYm.end(), &tmpArrY[0], &tmpArrY[ArrSize]);
         for (int i=0; i<ArrSize; i++){
-            _fYm[i] /= pow((1+lam),i);
-            _fXm[i] /= pow((1+lam),i);
+            _fYm[i] /= pow((1+lam),2*i);
+            _fXm[i] /= pow((1+lam),2*i);
+            // cout << "fYm[i] =" << _fYm[i] << endl;
+            // cout << "fXm[i] =" << _fXm[i] << endl;
         }
     }
 

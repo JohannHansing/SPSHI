@@ -77,7 +77,7 @@ CConfiguration::CConfiguration(
 	// init HI vectors matrices, etc
     // Configurations
     _n_cellsAlongb = 1;
-    int EwaldTest = 3; // Predefine _edgeParticles. Ewaldtest = 1 runs the program with only spheres in the corners of the cells, i.e. _edgeParticles = 1, EwaldTest = 2 with 2 edgeparticles, and so on
+    int EwaldTest = 0; // Predefine _edgeParticles. Ewaldtest = 1 runs the program with only spheres in the corners of the cells, i.e. _edgeParticles = 1, EwaldTest = 2 with 2 edgeparticles, and so on
     _noEwald = false;       // noEwald to use normal Rotne Prager instead of Ewald summed one
 
     _V = pow( _boxsize, 3 );
@@ -144,7 +144,7 @@ void CConfiguration::checkDisplacementforMM(){
 Vector3d CConfiguration::midpointScheme(Vector3d V0dt, Vector3d F){
     // Implementation of midpoint scheme according to Banchio2003
     Vector3d ppos_prime;
-    int n = 200000;
+    int n = 100;
     ppos_prime = _ppos + V0dt / n;
 
 	Vector3d vec_rij;
@@ -192,6 +192,8 @@ int CConfiguration::makeStep(){
         lrgDrift = (_Vdriftdt.squaredNorm() > 0.3);
 
         if (v_nan || lrgDrift) {
+            cout << "is Nan = " << v_nan << "    -   largeDrift? = " << lrgDrift << endl;
+            cout << "_Vdriftdt.squaredNorm() = " << _Vdriftdt.squaredNorm() << endl;
             calcStochasticForces();
             //cout << "drifCorrection: Vdrift^2 = " << _Vdriftdt.squaredNorm() <<  endl;
             tmp++;
@@ -842,16 +844,17 @@ Matrix3d  CConfiguration::lubricate( const Vector3d & rij ){
 				rn_vec(2) = values_3[n3];
 				rsq = rn_vec.squaredNorm();
                 if ( rsq <= _cutofflubSq ){
-					if (rsq < _cutofflubSq/2){
-                        if (rsq <= 0.00001 + _stericrSq){ // If there is overlap between particles, the distance is set to a very small value, according to Brady and Bossis in Phung1996
-                            //double corr = sqrt((0.0000001 + _stericrSq)/rsq);
-                            rsq = 0.00001 + _stericrSq;
-                            //cout << "######################## correction! ################" << endl;
-                            //rn_vec *= corr;
-                        }
-                        lubPart += lub2p(rn_vec, rsq, 8);
-                    }
-					else lubPart += lub2p(rn_vec, rsq, 5);
+					// if (rsq < _cutofflubSq/2){
+                    //     if (rsq <= 0.00001 + _stericrSq){ // If there is overlap between particles, the distance is set to a very small value, according to Brady and Bossis in Phung1996
+                    //         //double corr = sqrt((0.0000001 + _stericrSq)/rsq);
+                    //         rsq = 0.00001 + _stericrSq;
+                    //         //cout << "######################## correction! ################" << endl;
+                    //         //rn_vec *= corr;
+                    //     }
+                    //     lubPart += lub2p(rn_vec, rsq, 0);
+                    // }
+					// else lubPart += lub2p(rn_vec, rsq, 5);
+                    lubPart += lub2p(rn_vec, rsq); // Only this, to avoid problems with different mmax for Long-Range lubrication in lub2p (i.e. Sum3 and Sum4)
 				}
 			}
 		}
@@ -859,8 +862,9 @@ Matrix3d  CConfiguration::lubricate( const Vector3d & rij ){
     return lubPart;
 }
 
-Matrix3d CConfiguration::lub2p( Vector3d rij, double rsq, unsigned int mmax ){
+Matrix3d CConfiguration::lub2p( Vector3d rij, double rsq){
 	// This function returns the 3x3 SELF-lubrication part of the resistance matrix of the tracer particle, i.e. A_{11} in Jeffrey1984
+    unsigned int mmax = _fXm.size();
 
 	double s = 2*sqrt(rsq)/(_pradius + _polyrad);
 	// cout << "\ns " << s << endl;
@@ -885,7 +889,7 @@ Matrix3d CConfiguration::lub2p( Vector3d rij, double rsq, unsigned int mmax ){
 
     // Long-Range part added 07.01.2016
     double Sum3 = 0, Sum4 = 0;
-    for (int m = 1; m < _fXm.size(); m++){
+    for (int m = 0; m < mmax; m++){
         Sum3 += c1pows[m] * _fYm[m];
         Sum4 += c1pows[m] * _fXm[m];
     }
@@ -893,10 +897,14 @@ Matrix3d CConfiguration::lub2p( Vector3d rij, double rsq, unsigned int mmax ){
 	Matrix3d lubR = Matrix3d::Identity() * (c3 + Sum1 + Sum3) + rij * rij.transpose() / rsq * ( c4 + Sum4 - Sum3 );
 
 
-    // if (lubR(0,0) > 1000){
-//         cout << "rsq " << rsq << "  |    mmax " << mmax << endl;
-//         cout << "lubR:\n" << lubR << endl;
-//     }
+    //  if (lubR(0,0) > 1000){   //TODO del
+        //  cout << "rsq " << rsq << "  |    mmax " << mmax << endl;
+        //  cout << "lubR:\n" << lubR << endl;
+        //  cout << "Sum1:\n" << Sum1 << endl;
+        //  cout << "Sum2:\n" << Sum2 << endl;
+        //  cout << "Sum3:\n" << Sum3 << endl;
+        //  cout << "Sum4:\n" << Sum3 << endl;
+    //  }
 	return lubR;
 }
 
