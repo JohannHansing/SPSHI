@@ -228,8 +228,8 @@ private:
         const double tmpArrY[] =  {fy0,fy2,fy4,fy6,fy8,fy10};
         _fYm.insert(_fYm.end(), &tmpArrY[0], &tmpArrY[ArrSize]);
         for (int i=0; i<ArrSize; i++){
-            _fYm[i] /= pow((1+lam),2*i);
-            _fXm[i] /= pow((1+lam),2*i);
+            _fYm[i] /= pow(2*(1+lam),2*i);
+            _fXm[i] /= pow(2*(1+lam),2*i);
             // cout << "fYm[i] =" << _fYm[i] << endl;
             // cout << "fXm[i] =" << _fXm[i] << endl;
         }
