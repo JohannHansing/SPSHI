@@ -1,5 +1,4 @@
 #include "headers/CConfiguration.h"
-#include <boost/timer.hpp>
 
 
 using namespace Eigen;
@@ -15,12 +14,13 @@ CConfiguration::CConfiguration(){
 CConfiguration::CConfiguration(
         double timestep,  double potRange,  double potStrength,  double boxsize, double rodDistance, const bool ewaldCorr,
         double psize, const bool noLub, const bool steric, const bool ranU, bool hpi, double hpi_u, double hpi_k,
-		double polymersize)
+		double polymersize, bool fitRPinv)
 		{
     _potRange = potRange;
     _potStrength = potStrength;
     _pradius = psize/2;   //_pradius is now the actual radius of the particle. hence, I need to change the definition of the LJ potential to include (_pradius + _polyrad)   -  or maybe leave LJ pot out
     _polyrad = polymersize / 2;   //This is needed for testOverlap for steric and HI stuff !!
+    _fitRPinv = fitRPinv;
 	_boxsize = boxsize;
     _resetpos = _boxsize/2;
     _timestep = timestep;
@@ -69,8 +69,8 @@ CConfiguration::CConfiguration(
 	_r_cutoffsq = pow(_nmax * _boxsize, 2);   // Like Jain2012, r_cutoff is chosen such that exp(-(r_cutoff * alpha)^2) is small
 
 	// lubrication stuff
-    initLubStuff();
-    _cutofflubSq = pow(7.*(_polyrad + _pradius),2);
+    initLubStuff(psize,polymersize);
+    _cutofflubSq = pow(9*(_polyrad + _pradius),2);
     _stericrSq = pow(_pradius + _polyrad, 2);
 
 
@@ -658,7 +658,7 @@ void CConfiguration::calcTracerMobilityMatrix(bool full){
     			_mobilityMatrix.block<3,3>(0,j_count) = muij;
             }
             else{
-    			// only lower triangular of symmetric matrix is filled and used
+    			// This is for the non _ewaldCorr Case. Which is actually totally wrong and need to be removed!
     			_mobilityMatrix.block<3,3>(j_count,0) = RotnePrager( vec_rij, asq );;
     			_mobilityMatrix.block<3,3>(0,j_count) = muij;
             }
@@ -833,15 +833,16 @@ Matrix3d  CConfiguration::lubricate( const Vector3d & rij ){
 				rsq = rn_vec.squaredNorm();
                 if ( rsq <= _cutofflubSq ){
 					// if (rsq < _cutofflubSq/2){
-                    //     if (rsq <= 0.00001 + _stericrSq){ // If there is overlap between particles, the distance is set to a very small value, according to Brady and Bossis in Phung1996
+                               
                     //         //double corr = sqrt((0.0000001 + _stericrSq)/rsq);
-                    //         rsq = 0.00001 + _stericrSq;
+                    //         
                     //         //cout << "######################## correction! ################" << endl;
                     //         //rn_vec *= corr;
                     //     }
-                    //     lubPart += lub2p(rn_vec, rsq, 0);
-                    // }
-					// else lubPart += lub2p(rn_vec, rsq, 5);
+                    // If there is overlap between particles, the distance is set to a very small value, according to Brady and Bossis in Phung1996
+                    if (rsq <= 0.00001 + _stericrSq){
+                        rsq = 0.00001 + _stericrSq;
+                    }
                     lubPart += lub2p(rn_vec, rsq); // Only this, to avoid problems with different mmax for Long-Range lubrication in lub2p (i.e. Sum3 and Sum4)
 				}
 			}
@@ -881,19 +882,31 @@ Matrix3d CConfiguration::lub2p( Vector3d rij, double rsq){
         Sum3 += c1pows[m] * _fYm[m];
         Sum4 += c1pows[m] * _fXm[m];
     }
-    // End Long-Range part
+    // End Long-Range part 
 	Matrix3d lubR = Matrix3d::Identity() * (c3 + Sum1 + Sum3) + rij * rij.transpose() / rsq * ( c4 + Sum4 - Sum3 );
+    
 
-
-    //  if (lubR(0,0) > 1000){   //TODO del
-        //  cout << "rsq " << rsq << "  |    mmax " << mmax << endl;
-        //  cout << "lubR:\n" << lubR << endl;
-        //  cout << "Sum1:\n" << Sum1 << endl;
-        //  cout << "Sum2:\n" << Sum2 << endl;
-        //  cout << "Sum3:\n" << Sum3 << endl;
-        //  cout << "Sum4:\n" << Sum3 << endl;
-    //  }
-	return lubR;
+    //Here, i am subtracting the 2paricle RP part
+    Matrix3d RPinv;
+    // invRP fit function. Calculate fit Polymer
+    if (_fitRPinv){
+    	double sinv = 1./s;
+        double c5 = sinv;
+        double pI = _fitpIs[0]; double prr = _fitprrs[0];
+        for (int m = 1; m < _fitpIs.size(); m++){
+            pI += _fitpIs[m] * c5;
+            prr += _fitprrs[m] * c5;
+            c5 *= sinv;
+        }
+        RPinv = Matrix3d::Identity() * pI + rij * rij.transpose() / rsq * prr;
+    }
+    else {  // Matrix inversion
+        _RP2p.block<3,3>(0,3) = RotnePrager(rij, (_polyrad * _polyrad + _pradius * _pradius)/2 );
+        _RP2p.block<3,3>(3,0) = _RP2p.block<3,3>(0,3);
+        RPinv = CholInvertPart( _RP2p );
+    }
+    
+	return lubR - RPinv;
 }
 
 

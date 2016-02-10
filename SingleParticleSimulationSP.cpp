@@ -10,6 +10,7 @@
 #include "headers/CAverage.h"
 #include "headers/CConfiguration.h"
 
+#include <stdlib.h>     //for using the function sleep
 
 using namespace std;
 
@@ -22,10 +23,10 @@ using namespace std;
 
 //Function declarations
 string createDataFolder(
-        bool respos, double dt, double simtime, double potRange, double potStrength, double boxsize,
+        bool fitRPinv, double dt, double simtime, double potRange, double potStrength, double boxsize,
         double particlesize, double rDist, bool ewaldCorr, bool steric, bool randomPot, bool hpi, double hpi_u, double hpi_k, double polymersize, bool noLub, string cue);
 void parameterFile(
-        string folder, bool respos, double particlesize, double boxsize, double timestep, double runs, double steps,
+        string folder, bool fitRPinv, double particlesize, double boxsize, double timestep, double runs, double steps,
         double potStrength, double potRange, double rDist, bool ewaldCorr, bool recordPosHisto, bool steric, bool randomPot, bool hpi, double hpi_u,
 		double hpi_k, double polymersize, bool noLub, string cue);
 void parameterFileAppend(string folder, double executiontime);
@@ -52,7 +53,7 @@ int main(int argc, const char* argv[]){
 
     //TRIGGERS:
     bool writeTrajectory = (strcmp(argv[1] , "true") == 0 ) ;    // relative position TODO
-    bool resetPos = (strcmp(argv[2] , "true") == 0 ) ;
+    bool fitRPinv = (strcmp(argv[2] , "true") == 0 ) ;
     bool ewaldCorr = (strcmp(argv[3] , "true") == 0 ) ;
     bool recordPosHisto = (strcmp(argv[4] , "true") == 0 ) ;
     bool noLub = (strcmp(argv[5] , "true") == 0 ) ;
@@ -96,6 +97,14 @@ int main(int argc, const char* argv[]){
 			exit(1);
 		}
 		HI = true;
+        
+        std::string filename = "../rfitInvRP.py"; // The python script should lie in the folder "above" Release, i.e. where the C++ files are, such that it is tracked by git
+        std::string command = "python ";
+        std::string parameters = ' ' + toString(particlesize) + ' ' + toString(polymersize);
+        command += filename + parameters;
+        cout << "running: $" + command << endl;
+        system(command.c_str());
+        sleep(5);         //make the programme wait for 5 seconds, such that fit script can finish
 	}
 
     if (!includeSteric) {
@@ -109,9 +118,6 @@ int main(int argc, const char* argv[]){
     //MFP
     double fpInt = boxsize/10;
 
-    //printReport(resetPos, conf.getwallcrossings(0), conf.getwallcrossings(1), conf.getwallcrossings(2), timestep, urange, ustrength, rodDist, particlesize, runs,
-    //            sizeOfArray(timestep), sizeOfArray(urange), sizeOfArray(ustrength), sizeOfArray(rodDist), sizeOfArray(particlesize), ewaldCorr, includeSteric);
-
 
 
     steps = simtime/timestep;
@@ -122,13 +128,13 @@ int main(int argc, const char* argv[]){
 
     //initialize instance of configuration
     CConfiguration conf = CConfiguration(timestep, urange, ustrength, boxsize, rodDist, ewaldCorr, particlesize, noLub, includeSteric,
-    ranPot, hpi , hpi_u, hpi_k, polymersize);
+               ranPot, hpi , hpi_u, hpi_k, polymersize, fitRPinv);
     if (recordPosHisto) conf.initPosHisto();
 
     //Create data folders and print location as string to string "folder"
-    string folder = createDataFolder(resetPos, timestep, simtime, urange, ustrength, boxsize, particlesize, rodDist, ewaldCorr,
+    string folder = createDataFolder(fitRPinv, timestep, simtime, urange, ustrength, boxsize, particlesize, rodDist, ewaldCorr,
                                      includeSteric, ranPot, hpi, hpi_u, hpi_k, polymersize, noLub, conf.getTestCue());
-
+    
 
     //initialize averages
     CAverage energyU = CAverage("Upot", folder, instantvalues, runs);
@@ -157,7 +163,7 @@ int main(int argc, const char* argv[]){
     trajectoryfile.open((folder + "/Coordinates/trajectory.txt").c_str());
 
     // Write parameter file parameters.txt
-    parameterFile(folder, resetPos, particlesize, boxsize, timestep, runs, steps, ustrength, urange, rodDist,
+    parameterFile(folder, fitRPinv, particlesize, boxsize, timestep, runs, steps, ustrength, urange, rodDist,
 	ewaldCorr, recordPosHisto, includeSteric, ranPot ,hpi, hpi_u, hpi_k, polymersize, noLub, conf.getTestCue());
 
     if (includeSteric && conf.testOverlap()){
@@ -168,8 +174,7 @@ int main(int argc, const char* argv[]){
 // ************** START OF RUNS-LOOP *****************
     for (int l = 0; l<runs; l++){
 
-        if (resetPos) conf.resetposition();
-        else conf.updateStartpos();
+        conf.updateStartpos();
 
         instValIndex = 0;
         int fpCounter[3] = {0};                  //counter for first passage times (next point to pass first: fpCounter*fpInt
@@ -255,6 +260,8 @@ int main(int argc, const char* argv[]){
 
         }
         if ( recordPosHisto ) conf.printHistoMatrix(folder);
+        
+        if (l%100 == 0)  cout << "run " << toString(l) << endl;  
     }//----------END OF RUNS-LOOP ----------------
 
 
@@ -273,9 +280,6 @@ int main(int argc, const char* argv[]){
     //if ( recordPosHisto ) conf.printHistoMatrix(folder);
 
 
-
-    //printReport(resetPos, conf.getwallcrossings(0), conf.getwallcrossings(1), conf.getwallcrossings(2), timestep, urange, ustrength, rodDist, particlesize, runs,
-    //        sizeOfArray(timestep), sizeOfArray(urange), sizeOfArray(ustrength), sizeOfArray(rodDist), sizeOfArray(particlesize), ewaldCorr, includeSteric);
 
 
 	cout << "Simulation Finished" << endl;
@@ -302,7 +306,7 @@ int main(int argc, const char* argv[]){
 
 
 
-string createDataFolder(bool resetpos, double timestep, double simtime, double potRange, double potStrength,
+string createDataFolder(bool fitRPinv, double timestep, double simtime, double potRange, double potStrength,
         double boxsize, double particlesize, double rDist, bool ewaldCorr, bool steric, bool randomPot, bool hpi, double hpi_u, double hpi_k,
 		double polymersize, bool noLub, string testcue){
     //NOTE: Maybe I can leave out dt, as soon as I settled on a timestep
@@ -310,8 +314,8 @@ string createDataFolder(bool resetpos, double timestep, double simtime, double p
     char range[5];
     sprintf(range, "%.3f", potRange);
     //In the definition of folder, the addition has to START WITH A STRING! for the compiler to know what to do (left to right).
-    string folder = "sim_data";
-    if (!resetpos) folder = folder + "/noreset";
+    string folder = "sim_data/noreset";
+    if (fitRPinv) folder = folder + "/fitRPinv";
     if (!testcue.empty()) folder = folder + "/test" + testcue;
     if (ewaldCorr) folder = folder +  "/ewaldCorr";
     if (noLub) folder = folder +  "/noLub";
@@ -335,7 +339,7 @@ string createDataFolder(bool resetpos, double timestep, double simtime, double p
 }
 
 
-void parameterFile(string folder, bool resetpos, double particlesize, double boxsize, double timestep, double runs, double steps,
+void parameterFile(string folder, bool fitRPinv, double particlesize, double boxsize, double timestep, double runs, double steps,
     double potStrength, double potRange, double rDist, bool ewaldCorr, bool recordPosHisto, bool steric, bool randomPot, bool hpi, double hpi_u, double hpi_k,
 	double polymersize, bool noLub, string testcue){
     //Creates a file where the simulation settings are stored
@@ -352,7 +356,7 @@ void parameterFile(string folder, bool resetpos, double particlesize, double box
     parameterFile << "starttime " << now->tm_hour << ":" << now->tm_min << ":" << now->tm_sec << endl;
     parameterFile << "Sim_dir " << folder << endl;
     if (!testcue.empty()) parameterFile << "Test cue " << testcue << endl;
-    parameterFile << "ResetPos " << resetpos << endl;
+    parameterFile << "fitRPinv " << fitRPinv << endl;
     parameterFile << "ewaldCorr " << ewaldCorr << endl;
     parameterFile << "noLub " << noLub << endl;
     parameterFile << "recordPosHisto " << recordPosHisto << endl;

@@ -13,6 +13,7 @@
 #include <boost/random.hpp>
 #include <boost/random/normal_distribution.hpp>
 #include <boost/math/special_functions/bessel.hpp>
+#include <boost/timer.hpp>
 
 #include <Eigen/Dense>
 #include <Eigen/Cholesky>
@@ -89,6 +90,7 @@ private:
     double _cutoffMMsq;
     double _stericrSq;
     int _n_cellsAlongb;
+    bool _fitRPinv;
     // LOAD OF CRAP I THINK! This term is a correction for the tracer displacement at every time step due to the repeated tracer particle. It is needed to ensure that the average velocity of all particles in the system is 0. It equals (1-1/N) where N is the number of particles int the simulation box. For reference, see Durlofsky1987a page 3333 - Fundamental solution for flow in porous media and comparison with the Brinkmann equation.
     //double _pbc_corr;
 
@@ -107,6 +109,9 @@ private:
     std::vector<double> _fYm;
     double _cutofflubSq;
     double _V;
+    Eigen::Matrix<double, 6, 6> _RP2p;
+    std::vector<double> _fitpIs;
+    std::vector<double> _fitprrs;
 
 
     boost::mt19937 *m_igen;                      //generate instance of random number generator "twister".
@@ -151,7 +156,7 @@ public:
     CConfiguration();
     CConfiguration(
             double timestep,  double potRange,  double potStrength,  double boxsize, double rodDistance, const bool ewaldCorr, double psize,
-            const bool posHisto, const bool steric, const bool ranU,  bool hpi, double hpi_u, double hpi_k, double polymersize);
+            const bool posHisto, const bool steric, const bool ranU,  bool hpi, double hpi_u, double hpi_k, double polymersize, bool fitRPinv);
     void resetParameters(double timestep, double potRange, double potStrength, double boxsize);
     void updateStartpos();
     void resetposition();
@@ -190,7 +195,7 @@ public:
     }
 
 private:
-    void initLubStuff(){
+    void initLubStuff(double particlesize, double polymersize){
         const double lam = _polyrad/_pradius;
         const double c1 = pow(1+lam, -3);
 
@@ -224,7 +229,7 @@ private:
         double fy4 = 6*lam+81/16*lampow[2]+ 18*lampow[3];
         double fy6 = 4*lam + 54*lampow[2]+ 1241/64 *lampow[3 ]+ 81*lampow[4] + 72*lampow[5];
         double fy8 = 279*lampow[2] + 4261/8*lampow[3] + 126369/256*lampow[4] - 117/8*lampow[5] + 648*lampow[6] + 288*lampow[7];
-        double fy10 = 1152*lampow[2] +7857/4*lampow[3] +9487/16*lampow[4] + 10548393/1024*lampow[5] +67617/8*lampow[6] - 351/2*lampow[7 ]+ 3888*lampow[8] + 1152*lampow[9];
+        double fy10 = 1152*lampow[2] +7857/4*lampow[3] +98487/16*lampow[4] + 10548393/1024*lampow[5] +67617/8*lampow[6] - 351/2*lampow[7 ]+ 3888*lampow[8] + 1152*lampow[9];
         const double tmpArrY[] =  {fy0,fy2,fy4,fy6,fy8,fy10};
         _fYm.insert(_fYm.end(), &tmpArrY[0], &tmpArrY[ArrSize]);
         for (int i=0; i<ArrSize; i++){
@@ -232,6 +237,26 @@ private:
             _fXm[i] /= pow(2*(1+lam),2*i);
             // cout << "fYm[i] =" << _fYm[i] << endl;
             // cout << "fXm[i] =" << _fXm[i] << endl;
+        }
+        
+        
+        // Here, I create the matrix to store the two-particle Rotne-Prager calculation which needs to be inverted and subtracted from the two-particle resistance matrix (Brady1988)
+        _RP2p = Eigen::MatrixXd::Identity(6,6);
+        _RP2p.block<3,3>(3,3) = _pradius/_polyrad * Eigen::Matrix3d::Identity();
+        
+        
+        // reading two particle Rotne Prager fit stuff from file
+        std::vector<double> fitpIs;
+        std::string filename = "fits/fitp" + toString(particlesize) + "a" + toString(polymersize) + ".txt";
+        std::ifstream infile(filename.c_str());
+        std::string line;
+        while (std::getline(infile, line)){
+            std::istringstream iss(line);
+            double fitpI, fitprr;
+            if (!(iss >> fitpI >> fitprr)) { break; } // error
+
+            _fitpIs.push_back(fitpI);
+            _fitprrs.push_back(fitprr);
         }
     }
 
