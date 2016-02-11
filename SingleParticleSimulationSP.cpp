@@ -1,16 +1,5 @@
 
-#include <stdlib.h>     /* exit, EXIT_FAILURE */
-#include <string.h>
-#include <iostream>
-#include <fstream>
-#include <time.h>
-#include <sstream>
-#include <math.h>
-#include <boost/filesystem.hpp>
-#include "headers/CAverage.h"
-#include "headers/CConfiguration.h"
-
-#include <stdlib.h>     //for using the function sleep
+#include "headers/SingleParticleSimulationSP.h"
 
 using namespace std;
 
@@ -18,29 +7,6 @@ using namespace std;
 //Size of int large enough for large numbers such as steps???
 //fopen() fclose() each time that write XYZtraj is called? -> slow
 //rounding errors when calculating int steps = int simtime / double timestep
-
-
-
-//Function declarations
-string createDataFolder(
-        bool fitRPinv, double dt, double simtime, double potRange, double potStrength, double boxsize,
-        double particlesize, double rDist, bool ewaldCorr, bool steric, bool randomPot, bool hpi, double hpi_u, double hpi_k, double polymersize, bool noLub, string cue);
-void parameterFile(
-        string folder, bool fitRPinv, double particlesize, double boxsize, double timestep, double runs, double steps,
-        double potStrength, double potRange, double rDist, bool ewaldCorr, bool recordPosHisto, bool steric, bool randomPot, bool hpi, double hpi_u,
-		double hpi_k, double polymersize, bool noLub, string cue);
-void parameterFileAppend(string folder, double executiontime);
-
-template<typename T>
-string toString(const T& value);
-
-template <typename T, size_t N>
-inline
-size_t sizeOfArray( const T(&)[ N ] );
-
-
-
-
 
 int main(int argc, const char* argv[]){
 	// measure runtime of the simulation
@@ -51,15 +17,16 @@ int main(int argc, const char* argv[]){
     //NOTE: so far wallcrossings is added for all runs!!! makes it kind of incorrect, since after each run, ppos is reset.
     //NOTE: so far saving Instant Values for each tenth step!
 
+    //TODO struct delete 'bool' add struct name, e.g. _triggers.writeTrajectory
     //TRIGGERS:
-    bool writeTrajectory = (strcmp(argv[1] , "true") == 0 ) ;    // relative position TODO
-    bool fitRPinv = (strcmp(argv[2] , "true") == 0 ) ;
-    bool ewaldCorr = (strcmp(argv[3] , "true") == 0 ) ;
-    bool recordPosHisto = (strcmp(argv[4] , "true") == 0 ) ;
-    bool noLub = (strcmp(argv[5] , "true") == 0 ) ;
-    bool includeSteric = (strcmp(argv[6] , "true") == 0 ) ;  // steric 2
-	bool ranPot = (strcmp(argv[7] , "true") == 0 ) ;
-	bool hpi = (strcmp(argv[8] , "true") == 0 ) ;          // hpi exp
+    _triggers.writeTrajectory = (strcmp(argv[1] , "true") == 0 ) ;    // relative position TODO
+    _triggers.fitRPinv = (strcmp(argv[2] , "true") == 0 ) ;
+    _triggers.ranSpheres = (strcmp(argv[3] , "true") == 0 ) ;
+    _triggers.recordPosHisto = (strcmp(argv[4] , "true") == 0 ) ;
+    _triggers.noLub = (strcmp(argv[5] , "true") == 0 ) ;
+    _triggers.includeSteric = (strcmp(argv[6] , "true") == 0 ) ;  // steric 2
+	_triggers.ranPot = (strcmp(argv[7] , "true") == 0 ) ;
+	_triggers.hpi = (strcmp(argv[8] , "true") == 0 ) ;          // hpi exp
 	int boolpar = 8;
 
 	// Checking for correct structure of input arguments
@@ -71,28 +38,27 @@ int main(int argc, const char* argv[]){
 		}
 	}
 
+    //TODO struct delete int, double, etc, add _simpar
+    _simpar.runs = atoi( argv[boolpar+1] );                       // Number of Simulation runs to get mean values from
+    _simpar.timestep = atof( argv[boolpar+2] );
+    _simpar.simtime = atoi( argv[boolpar+3] );                   // simulation time
+    _simpar.instantvalues = 200;
 
-    int runs = atoi( argv[boolpar+1] );                       // Number of Simulation runs to get mean values from
-    double timestep = atof( argv[boolpar+2] );
-    int simtime = atoi( argv[boolpar+3] );                   // simulation time
-    int instantvalues = 200;
-    unsigned int steps;
-
-    double rodDist = atof( argv[boolpar+4] );                //Distance of the rods depending on boxsize. for zero do rodDist[]={0.0}
-    double boxsize = atof( argv[boolpar+5] );
-    double particlesize = atof( argv[boolpar+6] );
-    double urange = atof( argv[boolpar+7] );
-    double ustrength = atof( argv[boolpar+8] );
-	double hpi_u = atof( argv[boolpar+9] );
-	double hpi_k = atof( argv[boolpar+10] );
-	double polymersize = atof( argv[boolpar+11] );   // diameter of polymer chains, i.e. edgeparticles
-    unsigned int saveInt;
+    _modelpar.rodDist = atof( argv[boolpar+4] );                //Distance of the rods depending on boxsize. for zero do rodDist[]={0.0}
+    _modelpar.boxsize = atof( argv[boolpar+5] );
+    _modelpar.particlesize = atof( argv[boolpar+6] );
+    _modelpar.urange = atof( argv[boolpar+7] );
+    _modelpar.ustrength = atof( argv[boolpar+8] );
+	_modelpar.hpi_u = atof( argv[boolpar+9] );
+	_modelpar.hpi_k = atof( argv[boolpar+10] );
+	_modelpar.polymersize = atof( argv[boolpar+11] );   // diameter of polymer chains, i.e. edgeparticles
     int instValIndex;                             //Counter for addInstantValue
+    
 	double HI = false;
 
 	//HI
-	if (polymersize != 0){
-		if (fmod(10, polymersize) != 0 && (1 == fmod(10, polymersize)/polymersize)) {  // The second comparison is needed cause fmod()  sometimes does not work properly and gives fmod(a,b) = b, which of course is sensless
+	if (_modelpar.polymersize != 0){
+		if (fmod(10, _modelpar.polymersize) != 0 && (1 == fmod(10, _modelpar.polymersize)/_modelpar.polymersize)) {  // The second comparison is needed cause fmod()  sometimes does not work properly and gives fmod(a,b) = b, which of course is sensless
 			cerr << "Error; bad polymersize! (Nonzero modulus when dividing 10)" << endl;
 			exit(1);
 		}
@@ -100,15 +66,15 @@ int main(int argc, const char* argv[]){
         
         std::string filename = "../rfitInvRP.py"; // The python script should lie in the folder "above" Release, i.e. where the C++ files are, such that it is tracked by git
         std::string command = "python ";
-        std::string parameters = ' ' + toString(particlesize) + ' ' + toString(polymersize);
+        std::string parameters = ' ' + toString(_modelpar.particlesize) + ' ' + toString(_modelpar.polymersize);
         command += filename + parameters;
         cout << "running: $" + command << endl;
         system(command.c_str());
         sleep(5);         //make the programme wait for 5 seconds, such that fit script can finish
 	}
 
-    if (!includeSteric) {
-        noLub = false;
+    if (!_triggers.includeSteric) {
+        _triggers.noLub = false;
         cout << "!!! WARNING: Steric is disabled.\nActivating Lubrication, since it needs to be activated to replace steric interaction!!";
     }
 
@@ -116,42 +82,41 @@ int main(int argc, const char* argv[]){
 
 
     //MFP
-    double fpInt = boxsize/10;
+    double fpInt = _modelpar.boxsize/10;
 
 
 
-    steps = simtime/timestep;
-    saveInt = steps/instantvalues;
-    const int trajout = (int)(10/timestep);
-    const int MMcalcStep = (int)(0.05/timestep);
+    _simpar.steps = _simpar.simtime/_simpar.timestep;
+    _simpar.saveInt = _simpar.steps/_simpar.instantvalues;
+    const int trajout = (int)(10/_simpar.timestep);
+    const int MMcalcStep = (int)(0.05/_simpar.timestep);
 
 
     //initialize instance of configuration
-    CConfiguration conf = CConfiguration(timestep, urange, ustrength, boxsize, rodDist, ewaldCorr, particlesize, noLub, includeSteric,
-               ranPot, hpi , hpi_u, hpi_k, polymersize, fitRPinv);
-    if (recordPosHisto) conf.initPosHisto();
+    CConfiguration conf = CConfiguration(_simpar.timestep, _modelpar, _triggers, _files);
+    if (_triggers.recordPosHisto) conf.initPosHisto();
 
     //Create data folders and print location as string to string "folder"
-    string folder = createDataFolder(fitRPinv, timestep, simtime, urange, ustrength, boxsize, particlesize, rodDist, ewaldCorr,
-                                     includeSteric, ranPot, hpi, hpi_u, hpi_k, polymersize, noLub, conf.getTestCue());
+    //TODO struct createDataFolder does not return a folder anymore
+    createDataFolder(conf.getTestCue());
     
 
     //initialize averages
-    CAverage energyU = CAverage("Upot", folder, instantvalues, runs);
-    CAverage squareDisp = CAverage("squaredisp", folder, instantvalues, runs);
-    //CAverage displacem = CAverage("displacement", folder, instantvalues, runs);
-    //CAverage squareDisp_x = CAverage("squaredisp_x", folder, instantvalues, runs);
-    //CAverage squareDisp_y = CAverage("squaredisp_y", folder, instantvalues, runs);
-    //CAverage squareDisp_z = CAverage("squaredisp_z", folder, instantvalues, runs);
-    //CAverage mfp_x = CAverage("mfp_x", folder, 1, 1);
+    CAverage energyU = CAverage("Upot", _files.folder, _simpar.instantvalues, _simpar.runs);
+    CAverage squareDisp = CAverage("squaredisp", _files.folder, _simpar.instantvalues, _simpar.runs);
+    //CAverage displacem = CAverage("displacement", _files.folder, _simpar.instantvalues, _simpar.runs);
+    //CAverage squareDisp_x = CAverage("squaredisp_x", _files.folder, _simpar.instantvalues, _simpar.runs);
+    //CAverage squareDisp_y = CAverage("squaredisp_y", _files.folder, _simpar.instantvalues, _simpar.runs);
+    //CAverage squareDisp_z = CAverage("squaredisp_z", _files.folder, _simpar.instantvalues, _simpar.runs);
+    //CAverage mfp_x = CAverage("mfp_x", _files.folder, 1, 1);
     //CAverage mfp_xyz;
-    //if ( recordMFP ) mfp_xyz = CAverage("mfp_xyz", folder, 1, 1);
+    //if ( recordMFP ) mfp_xyz = CAverage("mfp_xyz", _files.folder, 1, 1);
 
 
 
     //create file to save the trajectory
-    string traj_file = folder + "/Coordinates/single_traj.xyz";
-    if (writeTrajectory) conf.saveXYZTraj(traj_file,0,"w");
+    string traj_file = _files.folder + "/Coordinates/single_traj.xyz";
+    if (_triggers.writeTrajectory) conf.saveXYZTraj(traj_file,0,"w");
 
 
     //cout << "Starting Run Number: " << simcounter << " out of " << totalsims << endl;
@@ -160,19 +125,18 @@ int main(int argc, const char* argv[]){
 
     unsigned int stepcount = 0;
     ofstream trajectoryfile;
-    trajectoryfile.open((folder + "/Coordinates/trajectory.txt").c_str());
+    trajectoryfile.open((_files.folder + "/Coordinates/trajectory.txt").c_str());
 
     // Write parameter file parameters.txt
-    parameterFile(folder, fitRPinv, particlesize, boxsize, timestep, runs, steps, ustrength, urange, rodDist,
-	ewaldCorr, recordPosHisto, includeSteric, ranPot ,hpi, hpi_u, hpi_k, polymersize, noLub, conf.getTestCue());
+    parameterFile(conf.getTestCue());
 
-    if (includeSteric && conf.testOverlap()){
+    if (_triggers.includeSteric && conf.testOverlap()){
         cout << "ERROR !!!!!!!!!!!!!!!!\nThere is an OVERLAP between the polymer network and the particle start position!" << endl;
         return 1;
     }
 
 // ************** START OF RUNS-LOOP *****************
-    for (int l = 0; l<runs; l++){
+    for (int l = 0; l<_simpar.runs; l++){
 
         conf.updateStartpos();
 
@@ -183,7 +147,7 @@ int main(int argc, const char* argv[]){
 
         //if (l%100==0) cout << "run " << l << endl;
 
-        for (int i = 0; i < steps; i++){  //calculate stochastic force first, then mobility force!!
+        for (int i = 0; i < _simpar.steps; i++){  //calculate stochastic force first, then mobility force!!
             // calc HI mobility matrix here, since it needs to be defined for random force normalisation
 
             if (HI){ // Calculate displacement and update mobilityMatrix if it is larger than 0.1*tracer Radius
@@ -196,17 +160,17 @@ int main(int argc, const char* argv[]){
             conf.calcStochasticForces();
 
 
-            if (ustrength != 0) conf.calcMobilityForces();
+            if (_modelpar.ustrength != 0) conf.calcMobilityForces();
 
 
-            if (((i+1)%100 == 0) && (l == 0) && writeTrajectory){       //Save the first trajectory to file
+            if (((i+1)%100 == 0) && (l == 0) && _triggers.writeTrajectory){       //Save the first trajectory to file
                 conf.saveXYZTraj(traj_file, i, "a");                    // TODO change back ((i+1)%XXX == 0) to 100
             }
 
 
 
 
-            if (((i+1)%saveInt) == 0){       //saving Instant Values for each saveInt'th step!
+            if (((i+1)%_simpar.saveInt) == 0){       //saving Instant Values for each saveInt'th step!
                 energyU.addInstantValue(conf.getUpot(), instValIndex);
                 squareDisp.addInstantValue(conf.getPosVariance(), instValIndex);
             //    displacem.addInstantValue(conf.getDisplacement(), instValIndex);
@@ -240,7 +204,7 @@ int main(int argc, const char* argv[]){
             */ // end steric2
 
                 //TODO steric
-            while (includeSteric && conf.testOverlap()){
+            while (_triggers.includeSteric && conf.testOverlap()){
                 conf.moveBack();
                 conf.calcStochasticForces();
                 stepcheck = conf.makeStep();
@@ -254,12 +218,12 @@ int main(int argc, const char* argv[]){
             stepcount++;
             if (stepcount%trajout == 0) {
                 std::vector<double> ppos = conf.getppos();
-                trajectoryfile << fixed << stepcount * timestep << "\t" << ppos[0] << " " << ppos[1] << " " << ppos[2] << endl;
+                trajectoryfile << fixed << stepcount * _simpar.timestep << "\t" << ppos[0] << " " << ppos[1] << " " << ppos[2] << endl;
             }
-            if (recordPosHisto && ((i % 5) == 0)) conf.addHistoValue();
+            if (_triggers.recordPosHisto && ((i % 5) == 0)) conf.addHistoValue();
 
         }
-        if ( recordPosHisto ) conf.printHistoMatrix(folder);
+        if ( _triggers.recordPosHisto ) conf.printHistoMatrix(_files.folder);
         
         if (l%100 == 0)  cout << "run " << toString(l) << endl;  
     }//----------END OF RUNS-LOOP ----------------
@@ -268,8 +232,8 @@ int main(int argc, const char* argv[]){
 
 
     //watch out: Save average instant values at timeInterval: timestep * saveinterval saveInt!!!
-    energyU.saveAverageInstantValues(saveInt*timestep);
-    squareDisp.saveAverageInstantValues(saveInt*timestep);
+    energyU.saveAverageInstantValues(_simpar.saveInt*_simpar.timestep);
+    squareDisp.saveAverageInstantValues(_simpar.saveInt*_simpar.timestep);
     //displacem.saveAverageInstantValues(saveInt*timestep);
     //squareDisp_x.saveAverageInstantValues(saveInt*timestep);
     //squareDisp_y.saveAverageInstantValues(saveInt*timestep);
@@ -277,7 +241,7 @@ int main(int argc, const char* argv[]){
     //if (recordMFP) mfp_x.saveAverageFPValue(fpInt);
     //if (recordMFP) mfp_xyz.saveAverageFPValue(fpInt);
 
-    //if ( recordPosHisto ) conf.printHistoMatrix(folder);
+    //if ( _triggers.recordPosHisto ) conf.printHistoMatrix(_files.folder);
 
 
 
@@ -286,122 +250,12 @@ int main(int argc, const char* argv[]){
 	end = clock();
 	double runtime = (double)((end-start)/(CLOCKS_PER_SEC));
 	cout << runtime << " seconds runtime." << endl;
-
-    parameterFileAppend(folder, runtime);
+    
+    //TODO struct parametereFileAppend does not take folder as argument anymore
+    parameterFileAppend(runtime);
 
 	trajectoryfile.close();
 
 
     return 0;
-}
-
-
-
-//--------------------------------------------------------------------------
-//**************************************************************************
-//--------------------------------------------------------------------------
-
-
-
-
-
-
-string createDataFolder(bool fitRPinv, double timestep, double simtime, double potRange, double potStrength,
-        double boxsize, double particlesize, double rDist, bool ewaldCorr, bool steric, bool randomPot, bool hpi, double hpi_u, double hpi_k,
-		double polymersize, bool noLub, string testcue){
-    //NOTE: Maybe I can leave out dt, as soon as I settled on a timestep
-    //NOTE: As soon as I create input-list with variables, I must change this function
-    char range[5];
-    sprintf(range, "%.3f", potRange);
-    //In the definition of folder, the addition has to START WITH A STRING! for the compiler to know what to do (left to right).
-    string folder = "sim_data/noreset";
-    if (fitRPinv) folder = folder + "/fitRPinv";
-    if (!testcue.empty()) folder = folder + "/test" + testcue;
-    if (ewaldCorr) folder = folder +  "/ewaldCorr";
-    if (noLub) folder = folder +  "/noLub";
-    if (randomPot) folder = folder + "/ranPot";
-    if (steric) folder = folder + "/steric";    //TODO steric2
-    if (hpi) folder = folder + "/HPI/hpiu" + toString(hpi_u) + "/hpik" + toString(hpi_k);
-    folder = folder
-            + "/dt" + toString(timestep)
-            + "/t" + toString(simtime)
-            + "/a" + toString(polymersize)
-            + "/d" + toString(rDist)
-            + "/b" + toString(boxsize)
-            + "/p" + toString(particlesize)
-            + "/k" + range
-            + "/u" + toString(potStrength);
-    boost::filesystem::create_directories(folder);
-    boost::filesystem::create_directory(folder + "/InstantValues");
-    boost::filesystem::create_directory(folder + "/Coordinates");
-    cout << "Writing data to folder:\n" << folder << endl;
-    return folder;
-}
-
-
-void parameterFile(string folder, bool fitRPinv, double particlesize, double boxsize, double timestep, double runs, double steps,
-    double potStrength, double potRange, double rDist, bool ewaldCorr, bool recordPosHisto, bool steric, bool randomPot, bool hpi, double hpi_u, double hpi_k,
-	double polymersize, bool noLub, string testcue){
-    //Creates a file where the simulation settings are stored
-    ofstream parameterFile;
-    parameterFile.open((folder + "/parameters.txt").c_str());
-
-    // Print time and date
-    time_t t = time(0);   // get time now
-    struct tm * now = localtime( & t );
-    parameterFile << "date " << (now->tm_year + 1900) << '-'
-         << (now->tm_mon + 1) << '-'
-         <<  now->tm_mday
-         << endl;
-    parameterFile << "starttime " << now->tm_hour << ":" << now->tm_min << ":" << now->tm_sec << endl;
-    parameterFile << "Sim_dir " << folder << endl;
-    if (!testcue.empty()) parameterFile << "Test cue " << testcue << endl;
-    parameterFile << "fitRPinv " << fitRPinv << endl;
-    parameterFile << "ewaldCorr " << ewaldCorr << endl;
-    parameterFile << "noLub " << noLub << endl;
-    parameterFile << "recordPosHisto " << recordPosHisto << endl;
-    parameterFile << "steric " << steric << endl;
-    parameterFile << "ranPot " << randomPot  << endl;
-    parameterFile << "HPI " << hpi  << endl;
-    if (hpi == true){
-        parameterFile << "hpi_u " << randomPot  << endl;
-        parameterFile << "hpi_k " << randomPot  << endl;
-    }
-    parameterFile << "d " << rDist << endl;
-    parameterFile << "p " << particlesize << endl;
-    parameterFile << "b " << boxsize << endl;
-    parameterFile << "dt " << timestep << endl;
-    parameterFile << "runs " << runs << endl;
-    parameterFile << "steps " << steps << endl;
-    parameterFile << "time " << timestep*steps << endl;
-    parameterFile << "k " << potRange << endl;
-    parameterFile << "U_0 " << potStrength << endl;
-    parameterFile << "a " << polymersize << endl;
-
-    parameterFile.close();
-}
-
-void parameterFileAppend(string folder, double executiontime){
-    // Appends parameters to parameters file
-    ofstream parameterFile;
-    parameterFile.open((folder + "/parameters.txt").c_str(), std::ios_base::app);
-    parameterFile << "ExecutionTime " << executiontime << " s" << endl;
-    parameterFile.close();
-}
-
-
-
-
-template<typename T>
-string toString(const T& value){
-    ostringstream oss;
-    oss << value;
-    return oss.str();
-}
-
-template <typename T, size_t N>
-inline
-size_t sizeOfArray( const T(&)[ N ] )
-{
-  return N;
 }

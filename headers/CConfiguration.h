@@ -21,6 +21,7 @@
 
 #include "CPolymers.h"
 #include "CPolySphere.h"
+#include "parameter_structs.h"
 
 
 class CConfiguration {
@@ -48,6 +49,7 @@ private:
 
     //bool Parameters
     bool _ewaldCorr;             // true if the modified exponential potential version is used that is not 3*U_0 at the intersections.
+    bool _ranSpheres;
     bool _LJPot;              // if true, then LJ interaction is calculated for steric hindrance
     bool _ranU;
     bool _hpi;
@@ -154,9 +156,7 @@ private:
 
 public:
     CConfiguration();
-    CConfiguration(
-            double timestep,  double potRange,  double potStrength,  double boxsize, double rodDistance, const bool ewaldCorr, double psize,
-            const bool posHisto, const bool steric, const bool ranU,  bool hpi, double hpi_u, double hpi_k, double polymersize, bool fitRPinv);
+    CConfiguration( double timestep, model_param_desc modelpar, sim_triggers triggers, file_desc files);
     void resetParameters(double timestep, double potRange, double potStrength, double boxsize);
     void updateStartpos();
     void resetposition();

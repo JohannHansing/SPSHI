@@ -11,33 +11,30 @@ const double _6root2 = 1.122462;
 CConfiguration::CConfiguration(){
 }
 
-CConfiguration::CConfiguration(
-        double timestep,  double potRange,  double potStrength,  double boxsize, double rodDistance, const bool ewaldCorr,
-        double psize, const bool noLub, const bool steric, const bool ranU, bool hpi, double hpi_u, double hpi_k,
-		double polymersize, bool fitRPinv)
+CConfiguration::CConfiguration( double timestep, model_param_desc modelpar, sim_triggers triggers, file_desc files)
 		{
-    _potRange = potRange;
-    _potStrength = potStrength;
-    _pradius = psize/2;   //_pradius is now the actual radius of the particle. hence, I need to change the definition of the LJ potential to include (_pradius + _polyrad)   -  or maybe leave LJ pot out
-    _polyrad = polymersize / 2;   //This is needed for testOverlap for steric and HI stuff !!
-    _fitRPinv = fitRPinv;
-	_boxsize = boxsize;
-    _resetpos = _boxsize/2;
+    _potRange = modelpar.urange;
+    _potStrength = modelpar.ustrength;
+    _pradius = modelpar.particlesize/2;   //_pradius is now the actual radius of the particle. hence, I need to change the definition of the LJ potential to include (_pradius + _polyrad)   -  or maybe leave LJ pot out
+    _polyrad = modelpar.polymersize / 2;   //This is needed for testOverlap for steric and HI stuff !!
+    _fitRPinv = triggers.fitRPinv;
+	_boxsize = modelpar.boxsize;
+    _resetpos = (_boxsize/_n_cellsAlongb)/2; // puts the particle in the center of the cell at the origin
     _timestep = timestep;
-    _rodDistance = rodDistance;
-    _ewaldCorr = ewaldCorr;
-    _noLub = noLub;
-    _LJPot = (steric == false) && (psize != 0);
-    _ranU = ranU;
+    _rodDistance = modelpar.rodDist;
+    _ewaldCorr = true;
+    _ranSpheres = triggers.ranSpheres;
+    _noLub = triggers.noLub;
+    _LJPot = (triggers.includeSteric == false) && (modelpar.particlesize != 0);
+    _ranU = triggers.ranPot;
     _poly = CPolymers();
-    _hpi = hpi;
     _upot = 0;
     _f_mob = Vector3d::Zero();
     _f_sto = Vector3d::Zero();
     _mu_sto = sqrt( 2 * _timestep );                 //timestep for stochastic force
-	_hpi = hpi;
-	_hpi_u = hpi_u;
-	_hpi_k = hpi_k;
+    _hpi = triggers.hpi;
+	_hpi_u = modelpar.hpi_u;
+	_hpi_k = modelpar.hpi_k;
     for (int i = 0; i < 3; i++){
         _ppos(i) = _resetpos;
         _startpos(i) = _resetpos;
@@ -69,23 +66,23 @@ CConfiguration::CConfiguration(
 	_r_cutoffsq = pow(_nmax * _boxsize, 2);   // Like Jain2012, r_cutoff is chosen such that exp(-(r_cutoff * alpha)^2) is small
 
 	// lubrication stuff
-    initLubStuff(psize,polymersize);
+    initLubStuff(modelpar.particlesize,modelpar.polymersize);
     _cutofflubSq = pow(9*(_polyrad + _pradius),2);
     _stericrSq = pow(_pradius + _polyrad, 2);
 
 
 	// init HI vectors matrices, etc
     // Configurations
-    _n_cellsAlongb = 1;
-    int _EwaldTest = 0; // Predefine _edgeParticles. Ewaldtest = 0 runs normal. Ewaldtest = 1 runs the program with only spheres in the corners of the cells, i.e. _edgeParticles = 1, EwaldTest = 2 with 2 edgeparticles, and so on
+    _n_cellsAlongb = 5;
+    int _EwaldTest = 1; // Predefine _edgeParticles. Ewaldtest = 0 runs normal. Ewaldtest = 1 runs the program with only spheres in the corners of the cells, i.e. _edgeParticles = 1, EwaldTest = 2 with 2 edgeparticles, and so on
     _noEwald = false;       // noEwald to use normal Rotne Prager instead of Ewald summed one
 
     _V = pow( _boxsize, 3 );
     _cutoffMMsq = pow(0.05*_boxsize/_n_cellsAlongb,2);
-    if (polymersize != 0) _HI = true;
+    if (_polyrad != 0) _HI = true;
 	if (_HI) {
         if (_EwaldTest != 0) _edgeParticles = _EwaldTest;
-		else _edgeParticles = (int) ( ( _boxsize/_n_cellsAlongb )/polymersize + 0.001);
+		else _edgeParticles = (int) ( ( _boxsize/_n_cellsAlongb )/modelpar.polymersize + 0.001);
 		_LJPot = false;
         double x = _boxsize/_n_cellsAlongb/2;
         _ppos << x, x, x;
@@ -99,7 +96,7 @@ CConfiguration::CConfiguration(
     _testcue = "";
     if ( _n_cellsAlongb != 1 ){
         _testcue = "/n" + toString(_n_cellsAlongb);
-        cout << "Forcing _edgeParticles = " << _edgeParticles << endl; //<< " --- and _mobilityMatrix.rows() = " <<_mobilityMatrix.rows() << endl;
+        cout << "Set _edgeParticles = " << _edgeParticles << endl; //<< " --- and _mobilityMatrix.rows() = " <<_mobilityMatrix.rows() << endl;
     }
     if ( _noEwald ) _testcue += "/noEwald";
     if ( _EwaldTest == 1 ) _testcue += "/EwaldTest";
@@ -152,7 +149,7 @@ Vector3d CConfiguration::midpointScheme(Vector3d V0dt, Vector3d F){
 
 // loop over tracer - particle mobility matrix elements
 	for (unsigned int j = 0; j < _polySpheres.size(); j++){
-		vec_rij = ppos_prime - _polySpheres[j].getPosition();
+		vec_rij = ppos_prime - _polySpheres[j].pos;
 		lubM += lubricate(vec_rij);
 	}
 	//cout << "############# _mobilityMatrix #########\n" << _mobilityMatrix << endl;
@@ -472,22 +469,12 @@ bool CConfiguration::testOverlap(){
     //Function to check, whether the diffusing particle of size psize is overlapping with any one of the rods (edges of the box)
     //mostly borrowed from moveParticleAndWatch()
 
-    // for (unsigned int i=0; i < _polySpheres.size(); i++ ){
-//         // First update tracer position in Polysphere class instances to
-//         _polySpheres[i].updateTracerVec( _ppos );
-//         if ( _polySpheres[i].getTracerdistsq() <= _stericrSq ){
-//             overlaps=true;
-//             continue;
-//         }
-//     }
-//     return overlaps;
-
 
     //"PROPER" METHOD FOR EwaldTest, where the overlap is calculated for spheres in the corners, not rods.
     if (_noLub &&  (_EwaldTest != 0)){
         Vector3d vrij;
         for (unsigned int j = 0; j < _polySpheres.size(); j++){
-            vrij = minImage(_ppos - _polySpheres[j].getPosition());
+            vrij = minImage(_ppos - _polySpheres[j].pos);
             if (vrij.squaredNorm() <= _stericrSq + 0.00001){
                 return true;
             }
@@ -557,12 +544,42 @@ void CConfiguration::initConstMobilityMatrix(){
             for (int nz=0; nz < _n_cellsAlongb; nz++){
                 nvec << nx, ny, nz; // Position of 0 corner of the simulation box
                 for (unsigned int i = 0; i < zeroPos.size(); i++){
-                    _polySpheres.push_back( CPolySphere( zeroPos[i] + nvec * _boxsize/_n_cellsAlongb, _startpos ) );
-                    //cout << "----" << _polySpheres[i].getPosition() << endl;
+                    _polySpheres.push_back( CPolySphere( zeroPos[i] + nvec * _boxsize/_n_cellsAlongb ) );
+                    //cout << "----" << _polySpheres[i].pos << endl;
             	}
             }
         }
 	}
+    
+    if (_ranSpheres){ // This serves to assign a random position to the edgeparticles. Note: Only use it with _EwaldTest = 1!
+        _polySpheres.clear();
+        bool overlap = true;
+        Vector3d vrij;
+        boost::mt19937 rng;
+    	boost::uniform_01<boost::mt19937&> zerotoone(*m_igen);
+        
+        //create sphere in corner at origin
+        _polySpheres.push_back( CPolySphere( Vector3d::Zero() ) );
+        int Nspheres = _n_cellsAlongb * _n_cellsAlongb * _n_cellsAlongb;
+        for (int i = 1; i < Nspheres; i++){
+            Vector3d spos = Vector3d::Zero();
+            while (overlap == true){
+                // test in a while loop whether the new sphere position overlaps with another sphere
+                overlap = false;
+                for (int k; k<3; k++){
+                    spos(i) = _boxsize/_n_cellsAlongb *zerotoone();
+                }
+                for (int l = 1; l < _polySpheres.size(); l++){
+                    vrij = minImage(spos - _polySpheres[l].pos);
+                    if (vrij.squaredNorm() <= 2*_polyrad + 0.000001){
+                        overlap = true;
+                        break;
+                    }
+                }
+            }
+            _polySpheres.push_back( CPolySphere( spos ) );
+        }
+    }
 
 
 	// create mobility matrix - Some elements remain constant throughout the simulation. Those are stored here.
@@ -602,7 +619,7 @@ void CConfiguration::initConstMobilityMatrix(){
 		unsigned int i_count = 3 * (i + 1);       // plus 1 is necessary due to omitted tracer particle
 
 		for (unsigned int j = i + 1; j < _polySpheres.size(); j++) {
-			vec_rij = _polySpheres[i].getPosition() - _polySpheres[j].getPosition();
+			vec_rij = _polySpheres[i].pos - _polySpheres[j].pos;
 			unsigned int  j_count = 3 * (j + 1);    // plus 1 is necessary due to omitted tracer particle
 
 		/*
@@ -637,7 +654,7 @@ void CConfiguration::calcTracerMobilityMatrix(bool full){
 
 // loop over tracer - particle mobility matrix elements
 	for (unsigned int j = 0; j < _polySpheres.size(); j++){
-        vec_rij = _ppos - _polySpheres[j].getPosition();
+        vec_rij = _ppos - _polySpheres[j].pos;
         if (_noEwald) vec_rij = minImage(vec_rij);
         //vec_rij = minImage(vec_rij); // tmpminim
         rij_sq = vec_rij.squaredNorm();
@@ -1040,12 +1057,12 @@ double CConfiguration::getDisplacement(){
 void CConfiguration::resetposition(){
     //Reset the position to random (allowed) position in cell.
     boost::mt19937 rng;
-	boost::uniform_01<boost::mt19937&> zeroone(*m_igen);
+	boost::uniform_01<boost::mt19937&> zerotoone(*m_igen);
 	bool overlap = true;
 	while (overlap == true){
 	    for (int i = 0; i < 3; i++){
 	        _entryside[i] = 0;
-			double ranPos = zeroone();
+			double ranPos = zerotoone();
 	        _startpos(i) = ranPos;
 	        _ppos(i) = ranPos;
 	        _boxnumberXYZ[i] = 0;
