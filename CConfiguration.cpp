@@ -367,17 +367,64 @@ void CConfiguration::calcMobilityForces(){
     _upot = Epot;
 }
 
-
+// OLD VERSION
 void CConfiguration::saveXYZTraj(string name, const int& move, string a_w){
+    Vector3d boxCoordinates;
+    boxCoordinates << _boxsize *_boxnumberXYZ[0], _boxsize *_boxnumberXYZ[1], _boxsize *_boxnumberXYZ[2];
+    Vector3d rtmp;
     FILE *f = fopen(name.c_str(), a_w.c_str());
 
-    fprintf(f, "%d\n%s (%8.3f %8.3f %8.3f) t=%d \n", 1, "sim_name", _boxsize, _boxsize, _boxsize, move);
+    if (!_ranSpheres){
+        fprintf(f, "%d\n%s (%8.3f %8.3f %8.3f) t=%d \n", 1, "sim_name", _boxsize, _boxsize, _boxsize, move);
+    }
+    else fprintf(f, "%d\n%s (%8.3f %8.3f %8.3f) t=%d \n", _polySpheres.size() + 1, "sim_name", _boxsize, _boxsize, _boxsize, move);
 
-    // polymer particles
-    fprintf(f, "%3s%9.3f%9.3f%9.3f \n","H", _ppos(0)+ _boxsize *_boxnumberXYZ[0], _ppos(1)+ _boxsize *_boxnumberXYZ[1], _ppos(2)+ _boxsize *_boxnumberXYZ[2]);   // absolute position
-	// fprintf(f, "%3s%9.3f%9.3f%9.3f \n","H", _ppos(0), _ppos(1), _ppos(2));  // relative position in box
+    // tracer particle
+    rtmp = _ppos;//+boxCoordinates;
+    fprintf(f, "%3s%9.3f%9.3f%9.3f \n","O", rtmp(0), rtmp(1),  rtmp(2));   // relative position in box
+    
+    if (_ranSpheres){
+        for (unsigned int i = 0; i < _polySpheres.size(); i++) {
+            rtmp = _polySpheres[i].pos;//+boxCoordinates;
+            fprintf(f, "%3s%9.3f%9.3f%9.3f \n","H", rtmp(0), rtmp(1),  rtmp(2));
+        }
+    }
     fclose(f);
 }
+
+// void CConfiguration::saveXYZTraj(string name, const int& move, string flag) {
+//     Vector3d boxCoordinates;
+//     boxCoordinates << _boxsize *_boxnumberXYZ[0], _boxsize *_boxnumberXYZ[1], _boxsize *_boxnumberXYZ[2];
+//     Vector3d rtmp;
+//     FILE *m_traj_file;
+//     if(flag=="w") {    //write to new file
+//         /*if(m_traj_file!=NULL) {
+//             fclose(m_traj_file);
+//         }*/
+//         m_traj_file = fopen(name.c_str(), flag.c_str());
+//         if(m_traj_file==NULL) {
+//             cout << "error creating trajfile" << endl;
+//         }
+//     }
+//
+//     fprintf(m_traj_file, "%d\n%s (%8.3f %8.3f %8.3f) t=%d \n", _polySpheres.size() + 1, "sim_name", _boxsize, _boxsize, _boxsize, move);
+//
+//
+//     // Tracer
+//     rtmp = _ppos;//+boxCoordinates;
+//     fprintf(m_traj_file, "%3s%9.3f%9.3f%9.3f \n","O", rtmp(0), rtmp(1),  rtmp(2));
+//     // polymer particles
+//     for (unsigned int i = 0; i < _polySpheres.size(); i++) {
+//         rtmp = _polySpheres[i].pos;//+boxCoordinates;
+//         fprintf(m_traj_file, "%3s%9.3f%9.3f%9.3f \n","H", rtmp(0), rtmp(1),  rtmp(2));
+//     }
+//
+//     //fflush(m_traj_file);
+//
+//     if(flag=="c") {    //close file
+//         if(m_traj_file!=NULL) { fclose(m_traj_file); }
+//     }
+// }
 
 
 void CConfiguration::setRanNumberGen(double seed){
@@ -555,30 +602,57 @@ void CConfiguration::initConstMobilityMatrix(){
         _polySpheres.clear();
         bool overlap = true;
         Vector3d vrij;
+        Vector3d spos;
         boost::mt19937 rng;
     	boost::uniform_01<boost::mt19937&> zerotoone(*m_igen);
         
         //create sphere in corner at origin
         _polySpheres.push_back( CPolySphere( Vector3d::Zero() ) );
         int Nspheres = _n_cellsAlongb * _n_cellsAlongb * _n_cellsAlongb;
-        for (int i = 1; i < Nspheres; i++){
-            Vector3d spos = Vector3d::Zero();
-            while (overlap == true){
-                // test in a while loop whether the new sphere position overlaps with another sphere
-                overlap = false;
-                for (int k; k<3; k++){
-                    spos(i) = _boxsize/_n_cellsAlongb *zerotoone();
-                }
-                for (int l = 1; l < _polySpheres.size(); l++){
-                    vrij = minImage(spos - _polySpheres[l].pos);
-                    if (vrij.squaredNorm() <= 2*_polyrad + 0.000001){
+    	for (int nx=0; nx < _n_cellsAlongb; nx++){
+    	    for (int ny=0; ny < _n_cellsAlongb; ny++){
+                for (int nz=0; nz < _n_cellsAlongb; nz++){
+                    nvec << nx, ny, nz; // Position of 0 corner of the simulation box
+                    if (nvec == Vector3d::Zero()) continue;
+                    else{
+                        while (overlap == true){
+                            overlap = false;
+                            for (int k = 0; k<3; k++){
+                                spos(k) = _boxsize/_n_cellsAlongb *zerotoone();
+                            }
+                            for (int l = 1; l < _polySpheres.size(); l++){
+                                vrij = minImage(spos - _polySpheres[l].pos);
+                                if (vrij.squaredNorm() <= 2*_polyrad + 0.000001){
+                                    overlap = true;
+                                    break;
+                                }
+                            }
+                        }
+                        _polySpheres.push_back( CPolySphere( spos + nvec * _boxsize/_n_cellsAlongb ) );
                         overlap = true;
-                        break;
-                    }
+                	}
                 }
             }
-            _polySpheres.push_back( CPolySphere( spos ) );
-        }
+    	}
+ //       for (int i // = 1; i < Nspheres; i++){
+ //            overlap = true;
+ //            while (overlap == true){
+ //                // test in a while loop whether the new sphere position overlaps with another sphere
+ //                overlap = false;
+ //                for (int k = 0; k<3; k++){
+ //                    spos(i) = _boxsize/_n_cellsAlongb *zerotoone();
+ //                }
+ //                for (int l = 1; l < _polySpheres.size(); l++){
+ //                    vrij = minImage(spos - _polySpheres[l].pos);
+ //                    if (vrij.squaredNorm() <= 2*_polyrad + 0.000001){
+ //                        overlap = true;
+ //                        break;
+ //                    }
+ //                }
+ //            }
+ //            cout << "Sphere position:\n" << spos << endl;
+ //            _polySpheres.push_back( CPolySphere( spos ) );
+ //        }
     }
 
 
