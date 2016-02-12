@@ -21,7 +21,7 @@
 
 #include "CPolymers.h"
 #include "CPolySphere.h"
-#include "parameter_structs.h"
+#include "misc/parameter_structs.h"
 
 
 class CConfiguration {

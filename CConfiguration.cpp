@@ -58,7 +58,7 @@ CConfiguration::CConfiguration( double timestep, model_param_desc modelpar, sim_
     setRanNumberGen(0);
 
     //Ewald sum stuff
-    _nmax = 3; // This corresponds to a cutoff of r_cutoff = 1 * _boxsize
+    _nmax = modelpar.nmax; // This corresponds to the r_cutoff = _nmax * _boxsize
 	_alpha = 1 * sqrt(M_PI) / _boxsize; // This value for alpha corresponds to the suggestion in Beenakker1986
 	_k_cutoff = 2. * _alpha * _alpha * _nmax * _boxsize;   /* This corresponds to suggestion by Jain2012 ( equation 15 and 16 ). */
 	_nkmax = (int) (_k_cutoff * _boxsize / (2. * M_PI) + 0.5);   /* The last bit (+0.5) may be needed to ensure that the next higher integer
@@ -67,14 +67,14 @@ CConfiguration::CConfiguration( double timestep, model_param_desc modelpar, sim_
 
 	// lubrication stuff
     initLubStuff(modelpar.particlesize,modelpar.polymersize);
-    _cutofflubSq = pow(9*(_polyrad + _pradius),2);
+    _cutofflubSq = pow(modelpar.lubcutint*(_polyrad + _pradius),2);
     _stericrSq = pow(_pradius + _polyrad, 2);
 
 
 	// init HI vectors matrices, etc
     // Configurations
-    _n_cellsAlongb = 5;
-    int _EwaldTest = 1; // Predefine _edgeParticles. Ewaldtest = 0 runs normal. Ewaldtest = 1 runs the program with only spheres in the corners of the cells, i.e. _edgeParticles = 1, EwaldTest = 2 with 2 edgeparticles, and so on
+    _n_cellsAlongb = modelpar.n_cells;
+    int _EwaldTest = modelpar.EwaldTest; // Predefine _edgeParticles. Ewaldtest = 0 runs normal. Ewaldtest = 1 runs the program with only spheres in the corners of the cells, i.e. _edgeParticles = 1, EwaldTest = 2 with 2 edgeparticles, and so on
     _noEwald = false;       // noEwald to use normal Rotne Prager instead of Ewald summed one
 
     _V = pow( _boxsize, 3 );
@@ -94,16 +94,15 @@ CConfiguration::CConfiguration( double timestep, model_param_desc modelpar, sim_
 
     // TEST CUE to modify the directory the output data is written to!!
     _testcue = "";
+    if ( _noEwald ) _testcue += "/noEwald";
+    if ( _EwaldTest > 0 ) _testcue += "/EwaldTest" + toString(_EwaldTest);
     if ( _n_cellsAlongb != 1 ){
-        _testcue = "/n" + toString(_n_cellsAlongb);
+        _testcue += "/n" + toString(_n_cellsAlongb);
         cout << "Set _edgeParticles = " << _edgeParticles << endl; //<< " --- and _mobilityMatrix.rows() = " <<_mobilityMatrix.rows() << endl;
     }
-    if ( _noEwald ) _testcue += "/noEwald";
-    if ( _EwaldTest == 1 ) _testcue += "/EwaldTest";
-    if ( _EwaldTest > 1 ) _testcue += "/EwaldTest" + toString(_EwaldTest);
     if (!_testcue.empty()) cout << "***********************************\n****  WARNING: String '_testcue' is not empty   ****\n***********************************" << endl;
     if ( _boxsize/_n_cellsAlongb != 10 ) cout << "***********************************\n****  WARNING: boxsize b != 10 * n_cell !!!  ****\n***********************************" << endl;
-
+    if (_noEwald) cout << "~~~~~~~~~~~~~~~~~~~~~~~~~!!!!!!!!!! Warning, noEwald is activated ! !!!!!!!!!~~~~~~~~~~~~~~~~~~~~~~~~" << endl;
 
     // for (int l=0;l<10;l++){
  //        Vector3d rn_vec = Vector3d::Zero();

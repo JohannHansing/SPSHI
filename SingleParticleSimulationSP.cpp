@@ -17,7 +17,6 @@ int main(int argc, const char* argv[]){
     //NOTE: so far wallcrossings is added for all runs!!! makes it kind of incorrect, since after each run, ppos is reset.
     //NOTE: so far saving Instant Values for each tenth step!
 
-    //TODO struct delete 'bool' add struct name, e.g. _triggers.writeTrajectory
     //TRIGGERS:
     _triggers.writeTrajectory = (strcmp(argv[1] , "true") == 0 ) ;    // relative position TODO
     _triggers.fitRPinv = (strcmp(argv[2] , "true") == 0 ) ;
@@ -25,18 +24,18 @@ int main(int argc, const char* argv[]){
     _triggers.recordPosHisto = (strcmp(argv[4] , "true") == 0 ) ;
     _triggers.noLub = (strcmp(argv[5] , "true") == 0 ) ;
     _triggers.includeSteric = (strcmp(argv[6] , "true") == 0 ) ;  // steric 2
-	_triggers.ranPot = (strcmp(argv[7] , "true") == 0 ) ;
-	_triggers.hpi = (strcmp(argv[8] , "true") == 0 ) ;          // hpi exp
-	int boolpar = 8;
+    _triggers.ranPot = (strcmp(argv[7] , "true") == 0 ) ;
+    _triggers.hpi = (strcmp(argv[8] , "true") == 0 ) ;          // hpi exp
+    int boolpar = 8;
 
-	// Checking for correct structure of input arguments
-	for (int k= 0; k < argc; k++ ) cout << "parameter " << k << " " << argv[k] << endl;
-	for (int b_i=1; b_i<=boolpar; b_i++){
-		if ((strcmp(argv[b_i] , "true") == 1 )  && (strcmp(argv[b_i] , "false") == 1 )){
-			cerr << "Error; Bool parameter " << b_i << " is not either 'true' or 'false'!" << endl;
-			exit(1);
-		}
-	}
+    // Checking for correct structure of input arguments
+    for (int k= 0; k < argc; k++ ) cout << "parameter " << k << " " << argv[k] << endl;
+    for (int b_i=1; b_i<=boolpar; b_i++){
+        if ((strcmp(argv[b_i] , "true") == 1 )  && (strcmp(argv[b_i] , "false") == 1 )){
+            cerr << "Error; Bool parameter " << b_i << " is not either 'true' or 'false'!" << endl;
+            exit(1);
+        }
+    }
 
     //TODO struct delete int, double, etc, add _simpar
     _simpar.runs = atoi( argv[boolpar+1] );                       // Number of Simulation runs to get mean values from
@@ -49,9 +48,23 @@ int main(int argc, const char* argv[]){
     _modelpar.particlesize = atof( argv[boolpar+6] );
     _modelpar.urange = atof( argv[boolpar+7] );
     _modelpar.ustrength = atof( argv[boolpar+8] );
-	_modelpar.hpi_u = atof( argv[boolpar+9] );
-	_modelpar.hpi_k = atof( argv[boolpar+10] );
-	_modelpar.polymersize = atof( argv[boolpar+11] );   // diameter of polymer chains, i.e. edgeparticles
+    _modelpar.hpi_u = atof( argv[boolpar+9] );
+    _modelpar.hpi_k = atof( argv[boolpar+10] );
+    _modelpar.polymersize = atof( argv[boolpar+11] );   // diameter of polymer chains, i.e. edgeparticles
+    _modelpar.n_cells = atoi( argv[boolpar+12] );   // number of cells along one axis of the simulation box
+    _modelpar.EwaldTest = atoi( argv[boolpar+13] );  // index to set the number of polymer particles. Default is EwaldTest = 0!
+    _modelpar.nmax = atoi( argv[boolpar+14] ); // This corresponds to the r_cutoff = _nmax * _boxsize
+    _modelpar.lubcutint = atoi( argv[boolpar+15] );
+    
+    //default values! atoi returns zero, if no valid number is given (which is good).
+    if (_modelpar.lubcutint == 0) _modelpar.lubcutint = 9;
+    if (_modelpar.nmax == 0) _modelpar.nmax = 3;
+    if (_modelpar.n_cells == 0) _modelpar.n_cells = 1;
+    
+    // first argument must be the name of the parameter file
+    // read_run_params(("../jobs/input/" + toString(argv[1]) + ".txt").c_str());
+    
+        
     int instValIndex;                             //Counter for addInstantValue
     
 	double HI = false;
