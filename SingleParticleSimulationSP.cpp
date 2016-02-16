@@ -86,9 +86,9 @@ int main(int argc, const char* argv[]){
         sleep(5);         //make the programme wait for 5 seconds, such that fit script can finish
 	}
 
-    if (!_triggers.includeSteric) {
-        _triggers.noLub = false;
-        cout << "!!! WARNING: Steric is disabled.\nActivating Lubrication, since it needs to be activated to replace steric interaction!!";
+    if (!_triggers.includeSteric && _triggers.noLub) {
+        _triggers.includeSteric = true;
+        cout << "!!! WARNING: Lubrication is disabled.\nActivating steric interaction!!";
     }
 
 
