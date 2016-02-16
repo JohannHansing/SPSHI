@@ -18,7 +18,8 @@ CConfiguration::CConfiguration( double timestep, model_param_desc modelpar, sim_
     _pradius = modelpar.particlesize/2;   //_pradius is now the actual radius of the particle. hence, I need to change the definition of the LJ potential to include (_pradius + _polyrad)   -  or maybe leave LJ pot out
     _polyrad = modelpar.polymersize / 2;   //This is needed for testOverlap for steric and HI stuff !!
     _fitRPinv = triggers.fitRPinv;
-	_boxsize = modelpar.boxsize;
+    _boxsize = modelpar.boxsize;
+    _n_cellsAlongb = modelpar.n_cells;
     _resetpos = (_boxsize/_n_cellsAlongb)/2; // puts the particle in the center of the cell at the origin
     _timestep = timestep;
     _rodDistance = modelpar.rodDist;
@@ -31,6 +32,7 @@ CConfiguration::CConfiguration( double timestep, model_param_desc modelpar, sim_
     _upot = 0;
     _f_mob = Vector3d::Zero();
     _f_sto = Vector3d::Zero();
+    _tracerMM = Matrix3d::Identity();
     _mu_sto = sqrt( 2 * _timestep );                 //timestep for stochastic force
     _hpi = triggers.hpi;
 	_hpi_u = modelpar.hpi_u;
@@ -73,7 +75,6 @@ CConfiguration::CConfiguration( double timestep, model_param_desc modelpar, sim_
 
 	// init HI vectors matrices, etc
     // Configurations
-    _n_cellsAlongb = modelpar.n_cells;
     int _EwaldTest = modelpar.EwaldTest; // Predefine _edgeParticles. Ewaldtest = 0 runs normal. Ewaldtest = 1 runs the program with only spheres in the corners of the cells, i.e. _edgeParticles = 1, EwaldTest = 2 with 2 edgeparticles, and so on
     _noEwald = false;       // noEwald to use normal Rotne Prager instead of Ewald summed one
 
@@ -81,17 +82,16 @@ CConfiguration::CConfiguration( double timestep, model_param_desc modelpar, sim_
     _cutoffMMsq = pow(0.05*_boxsize/_n_cellsAlongb,2);
     if (_ranSpheres && _boxsize > 10) _cutoffMMsq = pow(0.025*_boxsize,2);
     if (_polyrad != 0) _HI = true;
-	if (_HI) {
-        if (_EwaldTest != 0) _edgeParticles = _EwaldTest;
-		else _edgeParticles = (int) ( ( _boxsize/_n_cellsAlongb )/modelpar.polymersize + 0.001);
-		_LJPot = false;
-        double x = _boxsize/_n_cellsAlongb/2;
-        _ppos << x, x, x;
-        // THIS NEEDS TO COME LAST !!!!!!!
-		initConstMobilityMatrix();
-		calcTracerMobilityMatrix(true);
-        //_pbc_corr = 1 - 1/(_polySpheres.size()+1); // assign system size dependent value to pbc correction for tracer displacement in porous medium
-	}
+    if (_EwaldTest != 0) _edgeParticles = _EwaldTest;
+    else _edgeParticles = (int) ( ( _boxsize/_n_cellsAlongb )/modelpar.polymersize + 0.001);
+    initPolySpheres();
+    if (_HI) {
+        _LJPot = false;
+    // THIS NEEDS TO COME LAST !!!!!!!
+        initConstMobilityMatrix();
+        calcTracerMobilityMatrix(true);
+    //_pbc_corr = 1 - 1/(_polySpheres.size()+1); // assign system size dependent value to pbc correction for tracer displacement in porous medium
+    }
 
     // TEST CUE to modify the directory the output data is written to!!
     _testcue = "";
@@ -568,13 +568,8 @@ void CConfiguration::calcLJPot(const double r, double& U, double& Fr){
     Fr +=  24 / ( r * r ) * ( 2 * por6*por6 - por6 );
 }
 
-//**************************** HYDRODYNAMICS ****************************************************//
 
-void CConfiguration::initConstMobilityMatrix(){
-	double rxi = 0.0, ryi = 0.0, rzi = 0.0;
-	double rij = 0.0, rijsq = 0.0;
-
-
+void CConfiguration::initPolySpheres(){
 	// store the edgeParticle positions, so that I can simply loop through them later
     std::vector<Vector3d> zeroPos( 3 * _edgeParticles - 2 , Vector3d::Zero() );
     Vector3d nvec;
@@ -630,31 +625,19 @@ void CConfiguration::initConstMobilityMatrix(){
                         }
                         _polySpheres.push_back( CPolySphere( spos + nvec * _boxsize/_n_cellsAlongb ) );
                         overlap = true;
-                	}
+                    }
                 }
             }
     	}
- //       for (int i // = 1; i < Nspheres; i++){
- //            overlap = true;
- //            while (overlap == true){
- //                // test in a while loop whether the new sphere position overlaps with another sphere
- //                overlap = false;
- //                for (int k = 0; k<3; k++){
- //                    spos(i) = _boxsize/_n_cellsAlongb *zerotoone();
- //                }
- //                for (int l = 1; l < _polySpheres.size(); l++){
- //                    vrij = minImage(spos - _polySpheres[l].pos);
- //                    if (vrij.squaredNorm() <= 2*_polyrad + 0.000001){
- //                        overlap = true;
- //                        break;
- //                    }
- //                }
- //            }
- //            cout << "Sphere position:\n" << spos << endl;
- //            _polySpheres.push_back( CPolySphere( spos ) );
- //        }
     }
+    
+}
 
+//**************************** HYDRODYNAMICS ****************************************************//
+
+void CConfiguration::initConstMobilityMatrix(){
+	double rxi = 0.0, ryi = 0.0, rzi = 0.0;
+	double rij = 0.0, rijsq = 0.0;
 
 	// create mobility matrix - Some elements remain constant throughout the simulation. Those are stored here.
 	_mobilityMatrix = MatrixXd::Identity( 3 * (_polySpheres.size() + 1) , 3 * (_polySpheres.size() + 1) );

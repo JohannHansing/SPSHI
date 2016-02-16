@@ -141,6 +141,7 @@ private:
 	Eigen::Matrix3d lubricate( const Eigen::Vector3d & rij );
     Eigen::Vector3d midpointScheme(Eigen::Vector3d V0dt, Eigen::Vector3d F);
     void calcTracerMobilityMatrix(bool full);
+    void initPolySpheres();
 
     void report(std::string);
 
