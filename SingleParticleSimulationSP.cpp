@@ -143,6 +143,14 @@ int main(int argc, const char* argv[]){
     // Write parameter file parameters.txt
     parameterFile(conf.getTestCue());
 
+
+    if (_triggers.ranSpheres && conf.testOverlap()){
+        int oltest = conf.resetposition(); //assigns a random position to tracer particle in cell at origin.
+        if (oltest == 1){
+            return 1;
+        }
+    }
+
     if (_triggers.includeSteric && conf.testOverlap()){
         cout << "ERROR !!!!!!!!!!!!!!!!\nThere is an OVERLAP between the polymer network and the particle start position!" << endl;
         return 1;

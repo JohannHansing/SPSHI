@@ -159,7 +159,7 @@ public:
     CConfiguration( double timestep, model_param_desc modelpar, sim_triggers triggers, file_desc files);
     void resetParameters(double timestep, double potRange, double potStrength, double boxsize);
     void updateStartpos();
-    void resetposition();
+    int resetposition();
     int makeStep();
     int checkBoxCrossing();
     void calcStochasticForces();

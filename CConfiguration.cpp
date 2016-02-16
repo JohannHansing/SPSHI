@@ -517,7 +517,7 @@ bool CConfiguration::testOverlap(){
 
 
     //"PROPER" METHOD FOR EwaldTest, where the overlap is calculated for spheres in the corners, not rods.
-    if (_noLub &&  (_EwaldTest != 0)){
+    if ((_EwaldTest != 0)){
         Vector3d vrij;
         for (unsigned int j = 0; j < _polySpheres.size(); j++){
             vrij = minImage(_ppos - _polySpheres[j].pos);
@@ -1127,21 +1127,28 @@ double CConfiguration::getDisplacement(){
     return sqrt(d);
 } */
 
-void CConfiguration::resetposition(){
+int CConfiguration::resetposition(){
     //Reset the position to random (allowed) position in cell.
     boost::mt19937 rng;
 	boost::uniform_01<boost::mt19937&> zerotoone(*m_igen);
 	bool overlap = true;
-	while (overlap == true){
+	for (int s =0; s<50; s++){
 	    for (int i = 0; i < 3; i++){
-	        _entryside[i] = 0;
-			double ranPos = zerotoone();
+		double ranPos = zerotoone() * _boxsize/_n_cellsAlongb;
 	        _startpos(i) = ranPos;
 	        _ppos(i) = ranPos;
 	        _boxnumberXYZ[i] = 0;
 	    }
-		overlap = testOverlap();
+	    if (!testOverlap()){
+                overlap = false;
+                break;
+            }
 	}
+        if (overlap){
+            cout << "ERROR !!!!!!!!!!!!!!!!\nCould not find random start position without overlapt between the tracer and monomers.";
+            return 1;
+        }
+    return 0;
 }
 
 

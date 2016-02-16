@@ -11,3 +11,6 @@ Debug/
 Release/
 oldCode/
 tmp_pls delete/
+._*
+headers/._*
+__*
