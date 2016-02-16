@@ -79,6 +79,7 @@ CConfiguration::CConfiguration( double timestep, model_param_desc modelpar, sim_
 
     _V = pow( _boxsize, 3 );
     _cutoffMMsq = pow(0.05*_boxsize/_n_cellsAlongb,2);
+    if (_ranSpheres && _boxsize > 10) _cutoffMMsq = pow(0.025*_boxsize,2);
     if (_polyrad != 0) _HI = true;
 	if (_HI) {
         if (_EwaldTest != 0) _edgeParticles = _EwaldTest;
