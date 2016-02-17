@@ -930,8 +930,11 @@ Matrix3d CConfiguration::lub2p( Vector3d rij, double rsq){
     unsigned int mmax = _fXm.size();
 
 	double s = 2*sqrt(rsq)/(_pradius + _polyrad);
+    Matrix3d rrT = rij * rij.transpose() / rsq;
+    Matrix3d I = Matrix3d::Identity();
 	// cout << "\ns " << s << endl;
-	double c1 = pow(2/s, 2);
+    double sinv = 1./s;
+	double c1 = 4.*sinv*sinv;//= pow(2/s,2)
     double c1pows[mmax];
     c1pows[0] = 1;
     for (int m = 1; m < mmax; m++){
@@ -957,14 +960,13 @@ Matrix3d CConfiguration::lub2p( Vector3d rij, double rsq){
         Sum4 += c1pows[m] * _fXm[m];
     }
     // End Long-Range part 
-	Matrix3d lubR = Matrix3d::Identity() * (c3 + Sum1 + Sum3) + rij * rij.transpose() / rsq * ( c4 + Sum4 - Sum3 );
+	Matrix3d lubR = I * (c3 + Sum1 + Sum3) + rrT * ( c4 + Sum4 - Sum3 );
     
 
     //Here, i am subtracting the 2paricle RP part
     Matrix3d RPinv;
     // invRP fit function. Calculate fit Polymer
     if (_fitRPinv){
-    	double sinv = 1./s;
         double c5 = sinv;
         double pI = _fitpIs[0]; double prr = _fitprrs[0];
         for (int m = 1; m < _fitpIs.size(); m++){
@@ -972,7 +974,7 @@ Matrix3d CConfiguration::lub2p( Vector3d rij, double rsq){
             prr += _fitprrs[m] * c5;
             c5 *= sinv;
         }
-        RPinv = Matrix3d::Identity() * pI + rij * rij.transpose() / rsq * prr;
+        RPinv = I * pI + rrT * prr;
     }
     else {  // Matrix inversion
         _RP2p.block<3,3>(0,3) = RotnePrager(rij, (_polyrad * _polyrad + _pradius * _pradius)/2 );
