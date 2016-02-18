@@ -20,7 +20,8 @@ int main(int argc, const char* argv[]){
     //TRIGGERS:
     _triggers.writeTrajectory = (strcmp(argv[1] , "true") == 0 ) ;    // relative position TODO
     _triggers.fitRPinv = (strcmp(argv[2] , "true") == 0 ) ;
-    _triggers.ranSpheres = (strcmp(argv[3] , "true") == 0 ) ;
+    _triggers.ranSpheres = (strcmp(argv[3] , "ranSpheres") == 0  || strcmp(argv[3] , "trueRan") == 0) ;
+    _triggers.trueRan = (strcmp(argv[3] , "trueRan") == 0 ) ;
     _triggers.recordPosHisto = (strcmp(argv[4] , "true") == 0 ) ;
     _triggers.noLub = (strcmp(argv[5] , "true") == 0 ) ;
     _triggers.includeSteric = (strcmp(argv[6] , "true") == 0 ) ;  // steric 2

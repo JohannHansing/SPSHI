@@ -9,7 +9,7 @@
 #include <boost/filesystem.hpp>
 #include "CAverage.h"
 #include "CConfiguration.h"
-#include "misc/parameter_structs.h"
+#include "parameter_structs.h"
 #include "misc/SimpleIni.h"
 
 #include <stdlib.h>     //for using the function sleep
@@ -45,7 +45,8 @@ void createDataFolder(string testcue){
     //In the definition of folder, the addition has to START WITH A STRING! for the compiler to know what to do (left to right).
     _files.folder = "sim_data/noreset";
     if (_triggers.fitRPinv) _files.folder = _files.folder + "/fitRPinv";
-    if (_triggers.ranSpheres) _files.folder = _files.folder +  "/ranSpheres";
+    if (_triggers.trueRan) _files.folder = _files.folder +  "/trueRan";
+    else if (_triggers.ranSpheres) _files.folder = _files.folder +  "/ranSpheres";
     if (!testcue.empty()) _files.folder = _files.folder + "/test" + testcue;
     if (_triggers.noLub) _files.folder = _files.folder +  "/noLub";
     if (_triggers.ranPot) _files.folder = _files.folder + "/ranPot";
@@ -85,6 +86,7 @@ void parameterFile(string testcue){
     parameterFile << "fitRPinv " << _triggers.fitRPinv << endl;
     parameterFile << "ewaldCorr " << true << endl;
     parameterFile << "ranSpheres " << _triggers.ranSpheres << endl;
+    parameterFile << "trueRan " << _triggers.trueRan << endl;
     parameterFile << "noLub " << _triggers.noLub << endl;
     parameterFile << "recordPosHisto " << _triggers.recordPosHisto << endl;
     parameterFile << "steric " << _triggers.includeSteric << endl;

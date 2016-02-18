@@ -21,7 +21,7 @@
 
 #include "CPolymers.h"
 #include "CPolySphere.h"
-#include "misc/parameter_structs.h"
+#include "parameter_structs.h"
 
 
 class CConfiguration {
@@ -50,6 +50,7 @@ private:
     //bool Parameters
     bool _ewaldCorr;             // true if the modified exponential potential version is used that is not 3*U_0 at the intersections.
     bool _ranSpheres;
+    bool _trueRan;
     bool _LJPot;              // if true, then LJ interaction is calculated for steric hindrance
     bool _ranU;
     bool _hpi;
@@ -151,6 +152,14 @@ private:
         oss << value;
         return oss.str();
     }
+    
+    // double gen_random01()
+//     {
+//         boost::mt19937 rng;
+//         boost::uniform_real<double> u(0.0, 1.0);
+//         boost::variate_generator<boost::mt19937&, boost::uniform_real<double> > gen(rng, u);
+//         return gen();
+//     }
 
 
 
