@@ -153,7 +153,8 @@ int main(int argc, const char* argv[]){
 
 
     if (_triggers.ranSpheres && conf.testOverlap()){
-        int oltest = conf.resetposition(); //assigns a random position to tracer particle in cell at origin.
+        cout << "Resetting particle position to random allowed place in box." << endl;
+        int oltest = conf.resetposition(); //assigns a random allowed position to tracer particle in box.
         if (oltest == 1){
             return 1;
         }

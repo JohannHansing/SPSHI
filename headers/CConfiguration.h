@@ -153,14 +153,7 @@ private:
         return oss.str();
     }
     
-    // double gen_random01()
-//     {
-//         boost::mt19937 rng;
-//         boost::uniform_real<double> u(0.0, 1.0);
-//         boost::variate_generator<boost::mt19937&, boost::uniform_real<double> > gen(rng, u);
-//         return gen();
-//     }
-
+    
 
 
 

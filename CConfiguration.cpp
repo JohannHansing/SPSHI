@@ -1141,16 +1141,18 @@ double CConfiguration::getDisplacement(){
 } */
 
 int CConfiguration::resetposition(){
-    //Reset the position to random (allowed) position in cell.
+    //Reset the position to random (allowed) position in box.
     boost::mt19937 rng;
     boost::uniform_01<boost::mt19937&> zerotoone(*m_igen);
     bool overlap = true;
-    for (int s =0; s<50; s++){
+    for (int s =0; s<2000; s++){
         for (int i = 0; i < 3; i++){
-        double ranPos = zerotoone() * _boxsize/_n_cellsAlongb;
+            double ranPos = zerotoone() * _boxsize;
             _startpos(i) = ranPos;
             _ppos(i) = ranPos;
             _boxnumberXYZ[i] = 0;
+            _prevpos(i) = ranPos;
+            _lastcheck[i] = ranPos;
         }
         if (!testOverlap()){
                 overlap = false;
