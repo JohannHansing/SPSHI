@@ -611,15 +611,15 @@ void CConfiguration::initPolySpheres(){
                             overlap = false;
                             for (int k = 0; k<3; k++){
                                 double offset = 2*_polyrad*(nvec.norm() / (sqrt(3)*(_n_cellsAlongb-1)));
-                                cout << "offset = " << offset << endl;
+                                //cout << "offset = " << offset << endl;
                                 spos(k) = (_boxsize/_n_cellsAlongb - offset) *zerotoone();
-                                cout << "spos\n" <<spos << endl;
+                                //cout << "spos\n" <<spos << endl;
                             }
                             for (int l = 1; l < _polySpheres.size(); l++){
                                 vrij = minImage(spos - _polySpheres[l].pos);
                                 if (vrij.norm() < 2*_polyrad + 0.000001){
                                     overlap = true;
-                                    cout << "found overlap! rij = " << vrij.norm() << endl;
+                                    //cout << "found overlap! rij = " << vrij.norm() << endl;
                                     break;
                                 }
                             }
