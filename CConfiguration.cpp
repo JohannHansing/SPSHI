@@ -13,6 +13,9 @@ CConfiguration::CConfiguration(){
 
 CConfiguration::CConfiguration( double timestep, model_param_desc modelpar, sim_triggers triggers, file_desc files)
 		{
+    // seed = 0:  use time, else any integer
+    // init random number generator
+    setRanNumberGen(0);
     _potRange = modelpar.urange;
     _potStrength = modelpar.ustrength;
     _pradius = modelpar.particlesize/2;   //_pradius is now the actual radius of the particle. hence, I need to change the definition of the LJ potential to include (_pradius + _polyrad)   -  or maybe leave LJ pot out
@@ -55,10 +58,6 @@ CConfiguration::CConfiguration( double timestep, model_param_desc modelpar, sim_
         _max = 2;
     }
 
-    // seed = 0:  use time, else any integer
-    // init random number generator
-    setRanNumberGen(0);
-
     //Ewald sum stuff
     _nmax = modelpar.nmax; // This corresponds to the r_cutoff = _nmax * _boxsize
 	_alpha = 1 * sqrt(M_PI) / _boxsize; // This value for alpha corresponds to the suggestion in Beenakker1986
@@ -75,7 +74,7 @@ CConfiguration::CConfiguration( double timestep, model_param_desc modelpar, sim_
 
 	// init HI vectors matrices, etc
     // Configurations
-    int _EwaldTest = modelpar.EwaldTest; // Predefine _edgeParticles. Ewaldtest = 0 runs normal. Ewaldtest = 1 runs the program with only spheres in the corners of the cells, i.e. _edgeParticles = 1, EwaldTest = 2 with 2 edgeparticles, and so on
+    _EwaldTest = modelpar.EwaldTest; // Predefine _edgeParticles. Ewaldtest = 0 runs normal. Ewaldtest = 1 runs the program with only spheres in the corners of the cells, i.e. _edgeParticles = 1, EwaldTest = 2 with 2 edgeparticles, and so on
     _noEwald = false;       // noEwald to use normal Rotne Prager instead of Ewald summed one
 
     _V = pow( _boxsize, 3 );
@@ -367,7 +366,6 @@ void CConfiguration::calcMobilityForces(){
     _upot = Epot;
 }
 
-// OLD VERSION
 void CConfiguration::saveXYZTraj(string name, const int& move, string a_w){
     Vector3d boxCoordinates;
     boxCoordinates << _boxsize *_boxnumberXYZ[0], _boxsize *_boxnumberXYZ[1], _boxsize *_boxnumberXYZ[2];
@@ -383,7 +381,7 @@ void CConfiguration::saveXYZTraj(string name, const int& move, string a_w){
     rtmp = _ppos;//+boxCoordinates;
     fprintf(f, "%3s%9.3f%9.3f%9.3f \n","O", rtmp(0), rtmp(1),  rtmp(2));   // relative position in box
     
-    if (_ranSpheres){
+    if (_EwaldTest != 0){
         for (unsigned int i = 0; i < _polySpheres.size(); i++) {
             rtmp = _polySpheres[i].pos;//+boxCoordinates;
             fprintf(f, "%3s%9.3f%9.3f%9.3f \n","H", rtmp(0), rtmp(1),  rtmp(2));
@@ -598,7 +596,6 @@ void CConfiguration::initPolySpheres(){
         bool overlap = true;
         Vector3d vrij;
         Vector3d spos;
-        boost::mt19937 rng;
     	boost::uniform_01<boost::mt19937&> zerotoone(*m_igen);
         
         //create sphere in corner at origin
@@ -610,18 +607,28 @@ void CConfiguration::initPolySpheres(){
                     nvec << nx, ny, nz; // Position of 0 corner of the simulation box
                     if (nvec == Vector3d::Zero()) continue;
                     else{
-                        while (overlap == true){
+                        for (int count=0; count < 50; count++){
                             overlap = false;
                             for (int k = 0; k<3; k++){
-                                spos(k) = _boxsize/_n_cellsAlongb *zerotoone();
+                                double offset = 2*_polyrad*(nvec.norm() / (sqrt(3)*(_n_cellsAlongb-1)));
+                                cout << "offset = " << offset << endl;
+                                spos(k) = (_boxsize/_n_cellsAlongb - offset) *zerotoone();
+                                cout << "spos\n" <<spos << endl;
                             }
                             for (int l = 1; l < _polySpheres.size(); l++){
                                 vrij = minImage(spos - _polySpheres[l].pos);
-                                if (vrij.squaredNorm() <= 2*_polyrad + 0.000001){
+                                if (vrij.norm() < 2*_polyrad + 0.000001){
                                     overlap = true;
+                                    cout << "found overlap! rij = " << vrij.norm() << endl;
                                     break;
                                 }
                             }
+                            // if there is no overlap after the previous for loop to test overlap, then stop this for loop and accept the sphere pos
+                            if (overlap==false) break;
+                        }
+                        if (overlap==true){
+                            cout << "ERROR: Overlap between polyspheres could not be avoided." << endl;
+                            throw 2;
                         }
                         _polySpheres.push_back( CPolySphere( spos + nvec * _boxsize/_n_cellsAlongb ) );
                         overlap = true;

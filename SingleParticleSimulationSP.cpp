@@ -106,7 +106,14 @@ int main(int argc, const char* argv[]){
 
 
     //initialize instance of configuration
-    CConfiguration conf = CConfiguration(_simpar.timestep, _modelpar, _triggers, _files);
+    CConfiguration conf;
+    try{
+        conf = CConfiguration(_simpar.timestep, _modelpar, _triggers, _files);
+    }
+    catch(int e){
+        cout << "An exception occurred. Exception Nr. " << e << '\n';
+        return 1;
+    }
     if (_triggers.recordPosHisto) conf.initPosHisto();
 
     //Create data folders and print location as string to string "folder"
