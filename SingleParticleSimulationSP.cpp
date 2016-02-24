@@ -68,24 +68,22 @@ int main(int argc, const char* argv[]){
         
     int instValIndex;                             //Counter for addInstantValue
     
-	double HI = false;
+    double HI = false;
 
-	//HI
-	if (_modelpar.polymersize != 0){
-		if (fmod(10, _modelpar.polymersize) != 0 && (1 == fmod(10, _modelpar.polymersize)/_modelpar.polymersize)) {  // The second comparison is needed cause fmod()  sometimes does not work properly and gives fmod(a,b) = b, which of course is sensless
-			cerr << "Error; bad polymersize! (Nonzero modulus when dividing 10)" << endl;
-			exit(1);
-		}
-		HI = true;
-        
-        std::string filename = "../rfitInvRP.py"; // The python script should lie in the folder "above" Release, i.e. where the C++ files are, such that it is tracked by git
-        std::string command = "python ";
-        std::string parameters = ' ' + toString(_modelpar.particlesize) + ' ' + toString(_modelpar.polymersize);
-        command += filename + parameters;
-        cout << "running: $" + command << endl;
-        system(command.c_str());
-        sleep(5);         //make the programme wait for 5 seconds, such that fit script can finish
-	}
+    //HI
+    if (_modelpar.polymersize != 0){
+        HI = true;
+    
+        if (_triggers.fitRPinv == true){
+            std::string filename = "../rfitInvRP.py"; // The python script should lie in the folder "above" Release, i.e. where the C++ files are, such that it is tracked by git
+            std::string command = "python ";
+            std::string parameters = ' ' + toString(_modelpar.particlesize) + ' ' + toString(_modelpar.polymersize);
+            command += filename + parameters;
+            cout << "running: $" + command << endl;
+            system(command.c_str());
+            sleep(5);         //make the programme wait for 5 seconds, such that fit script can finish
+        }
+    }
 
     if (!_triggers.includeSteric && _triggers.noLub) {
         _triggers.includeSteric = true;

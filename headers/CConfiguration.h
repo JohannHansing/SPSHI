@@ -188,13 +188,11 @@ public:
 
     Eigen::Vector3d minImage(Eigen::Vector3d rij){
         // returns disctance vector with minimal image convention.
-        // For info - Check wikipedia
-        double bhalf = _boxsize/2.;
+        Eigen::Vector3d rij_rem;
         for (int i=0;i<3;i++){
-            if (rij(i) > bhalf)          rij(i) -= _boxsize;
-            else if (rij(i) <= -bhalf)   rij(i) += _boxsize;
+            rij_rem(i) = remainder(rij(i),_boxsize);
         }
-        return rij;
+        return rij_rem;
     }
 
 private:
