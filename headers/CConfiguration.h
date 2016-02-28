@@ -290,8 +290,8 @@ private:
      * for looping over arrys/vectors
      */
     std::array<vector<CRod> , 3> _rodvec; // vector to store polymer rods in cell, one vector stores polymers that are parallel to the same axis
-    double _n_rods = 0.5;
-    double _ntry = 5.;  // multiplier for maximum number of rods in one cell _n_max = _ntry * _n_rods
+    double _n_rods = 1;
+    double _ntry = 1.;  // multiplier for maximum number of rods in one cell _n_max = _ntry * _n_rods
     unsigned int avrods =0;
     unsigned int avcount =0;
     
@@ -346,8 +346,11 @@ public:
                         overlaps = false;
                         // SO FAR SET INITAL RODS; SUCH THAT CENTRAL CELL * 1.7 IS EMPTY! 
                         //TODO ran_sign()*.15*zerotoone() + 0.5 + 1.35 * ran_sign() is between .15+1.35+0.5 = 2 and -.15+1.35+0.5 = 1.7 or between .15-1.35+0.5 = -0.7 and -.15-1.35+0.5 = -1
-                        initVec(ortho1) = (ran_sign()*.15*zerotoone() + 0.5 + 1.35 * ran_sign() ) *_boxsize;
-                        initVec(ortho2) = (ran_sign()*.15*zerotoone() + 0.5 + 1.35 * ran_sign() ) *_boxsize;
+                        double centerspace = (_pradius+_polyrad) / _boxsize;
+                        double halfsidespace = (1.5 - centerspace)/2;
+                        double middleofsidespace = halfsidespace + centerspace;
+                        initVec(ortho1) = (ran_sign()*zerotoone()*halfsidespace + 0.5 + middleofsidespace * ran_sign() ) *_boxsize;
+                        initVec(ortho2) = (ran_sign()*zerotoone()*halfsidespace + 0.5 + middleofsidespace * ran_sign() ) *_boxsize;
                         initVec(axis) = 0;
                         overlaps = testRodOverlap(initVec,axis,ortho1,ortho2,_rodvec[axis].size());
                         if (overlaps==false) break;

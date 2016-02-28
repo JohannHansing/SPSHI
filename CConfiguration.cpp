@@ -97,7 +97,7 @@ CConfiguration::CConfiguration( double timestep, model_param_desc modelpar, sim_
     }
 
     // TEST CUE to modify the directory the output data is written to!!
-    _testcue = "";
+    _testcue = "/CG/ntry1/nrods1";
     if ( _noEwald ) _testcue += "/noEwald";
     if ( _EwaldTest > 0 ) _testcue += "/EwaldTest" + toString(_EwaldTest);
     if ( _n_cellsAlongb != 1 ){
