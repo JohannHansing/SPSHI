@@ -652,6 +652,9 @@ void CConfiguration::initConstMobilityMatrix(){
 
     // create mobility matrix - Some elements remain constant throughout the simulation. Those are stored here.
     _mobilityMatrix = MatrixXd::Identity( 3 * (_polySpheres.size() + 1) , 3 * (_polySpheres.size() + 1) );
+    
+    // Create matrix that stores previous result of conjugate gradient method, for faster conversion.
+    _prevCG = Eigen::MatrixXd::Identity(3 * (_polySpheres.size() + 1) , 3 );
 
 
     // Eigen-vector for interparticle distance. Needs to initialized as zero vector for self mobilities.
@@ -749,9 +752,13 @@ void CConfiguration::calcTracerMobilityMatrix(const bool& full){
 
     // create resistance matrix - Some elements remain constant throughout the simulation. Those are stored here.
     if (full){
-         _resMNoLub = CholInvertPart(_mobilityMatrix);
-          //_resMNoLub = _mobilityMatrix.inverse().block<3,3>(0,0);
-         //cout << "$$$$$$$ _resMNoLub $$$$$$$$$\n" << _resMNoLub  << endl;
+        //TESTING
+         _resMNoLub = ConjGradInvert(_mobilityMatrix);
+         //Matrix3d diffmat = _resMNoLub - CholInvertPart(_mobilityMatrix);
+         //cout << "----\n" << diffmat << endl;
+         //if (_resMNoLub(2,0) < 0.0001 || _resMNoLub(2,0) < 0.0001  ){
+         //    cout << "$$$$$$$ _resMNoLub $$$$$$$$$\n" << _resMNoLub  << endl;
+         //}
     }
     // Add lubrication Part to tracer Resistance Matrix and invert
     _RMLub = _resMNoLub + lubM;
@@ -1024,7 +1031,16 @@ Matrix3d CConfiguration::lub2p( Vector3d &rij, double &rsq){
 }
 
 
-
+Matrix3d CConfiguration::ConjGradInvert(const MatrixXd &A){
+    MatrixXd x,I = MatrixXd::Identity(A.rows(),3);
+    ConjugateGradient<MatrixXd, Lower|Upper> cg;
+    cg.setTolerance( 0.00001 );
+    cg.compute(A);
+    _prevCG = cg.solveWithGuess(I,_prevCG);
+    //_prevCG = x;//temp. make this _prevCG = cg.solveWithGuess(I,_prevCG);
+    
+    return _prevCG.block<3,3>(0,0);
+}
 
 
 Matrix3d CConfiguration::CholInvertPart (const MatrixXd &A) {

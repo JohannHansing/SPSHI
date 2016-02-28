@@ -187,9 +187,6 @@ int main(int argc, const char* argv[]){
             if (HI){ // Calculate displacement and update mobilityMatrix if it is larger than 0.1*tracer Radius
                 conf.checkDisplacementforMM();
             }
-            //    if ( i%MMcalcStep == 0 ){ conf.calcTracerMobilityMatrix(true); }
-            //    else { conf.calcTracerMobilityMatrix(false); }
-            //}
 
             conf.calcStochasticForces();
 

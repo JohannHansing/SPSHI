@@ -17,6 +17,8 @@
 
 #include <Eigen/Dense>
 #include <Eigen/Cholesky>
+//TESTING
+#include <Eigen/IterativeLinearSolvers>
 
 
 #include "CPolymers.h"
@@ -88,6 +90,7 @@ private:
 	Eigen::Matrix3d _tracerMM;
 	Eigen::Matrix3d _resMNoLub;
     Eigen::Matrix3d _RMLub;
+    Eigen::MatrixXd _prevCG;
 	bool _HI;
 	double _polyrad;
         double _polydiamSq;
@@ -139,6 +142,8 @@ private:
     void calcLJPot(const double &r, double &U, double &dU);
     void initConstMobilityMatrix();
     Eigen::Matrix3d CholInvertPart (const Eigen::MatrixXd &A);
+    //TESTING
+    Eigen::Matrix3d ConjGradInvert(const Eigen::MatrixXd &A);
     Eigen::Matrix3d Cholesky3x3(const Eigen::Matrix3d &mat);
     Eigen::Matrix3d invert3x3 (const Eigen::Matrix3d &A);
 	Eigen::Matrix3d realSpcSm( const Eigen::Vector3d & rij, const bool &self, const double &asq );
@@ -316,7 +321,7 @@ public:
 
     void initRodsVec(){
         Eigen::Vector3d initVec;
-        int ortho1, ortho2, retry;
+        int ortho1, ortho2, retry =0;
         
         double _spheredist = _boxsize/(2*_polyrad);
         int Nrods[3]; // number of rods in certain plane, i.e. parallel to a certain axis.
@@ -347,14 +352,18 @@ public:
                         overlaps = testRodOverlap(initVec,axis,ortho1,ortho2,_rodvec[axis].size());
                         if (overlaps==false) break;
                     }
+                    if (overlaps==true){//if there is still overlap after the 'count' for loop -- break out of i loop, and do a retry.
+                        if (retry == 500){
+                            cout << "could not find suitable rod positions at init after 500 retries." << endl;
+                            cout << "Rod numbers were:\n" << _rodvec[0].size() << " ++ " << _rodvec[1].size() << " ++ " << _rodvec[2].size() << endl;
+                            throw 18;
+                        }
+                        else break;
+                    }
                     CRod newRod = CRod(axis, initVec, 3*_edgeParticles, _sphereoffset, _boxsize );
                     _rodvec[axis].push_back(newRod);
                 }
-            }
-            if (overlaps==true && retry != 500) break;//if after 'count' for loop still overlap -- break, and do a retry.
-            else{
-                cout << "could not find suitable rod positions on init after 500 retries." << endl;
-                throw 18;
+                if (overlaps==true) break;//if there is still overlap after the 'i' for loop -- break out of axis loop, and do a retry.
             }
         }
     }
@@ -395,10 +404,10 @@ public:
             assert((reln < 1.) && "Error: reln in updateRodsVec must be smaller than 1!");
             // erase the first 3 elements:
             while (overlaps==true){
+                _rodvec[plane].erase (_rodvec[plane].end()-newrods,_rodvec[plane].end());
                 newrods=0;
                 ++retry;
                 cout << "RETRY for ranRods update" << endl;
-                _rodvec[plane].erase (_rodvec[plane].end()-newrods,_rodvec[plane].end());
                 for (int j=0;j<3*n_tries;j++){// factor 3, since I reassign 3 cells per plane
                     if (zerotoone() < reln ){  
                         retry = 0;
@@ -414,14 +423,18 @@ public:
                             overlaps = testRodOverlap(tmpvec,plane,crossaxis,ortho2,newrods);
                             if (overlaps==false) break;
                         }
+                        if (overlaps==true){//if there is still overlap after the 'count' for loop -- break out of j loop, and do a retry.
+                            if (retry == 100){
+                                cout << "could not find suitable rod positions at update after 100 retries." << endl;
+                                cout << "Rod numbers were:\n" << _rodvec[0].size() << " ++ " << _rodvec[1].size() << " ++ " << _rodvec[2].size() << endl;
+                                throw 18;
+                            }
+                            else break;
+                        }
                         _rodvec[plane].push_back(  CRod( plane, tmpvec, 3*_edgeParticles, _sphereoffset, _boxsize )  );
                         ++newrods;
                     }
-                    if (overlaps==true && retry != 100) break;//if after 'count' for loop still overlap -- break, and do a retry.
-                    else{
-                        cout << "could not find suitable rod positions in 100 retries." << endl;
-                        throw 19;
-                    }
+                    // NO AXIS LOOP HERE! if (overlaps==true) break;//if there is still overlap after the 'i' for loop -- break out of axis loop, and do a retry.
                 }
             }
         }
@@ -430,6 +443,7 @@ public:
         avrods += _rodvec[0].size() + _rodvec[1].size() + _rodvec[2].size();
         avcount += 1;
     }
+    
     
     bool testRodOverlap(Eigen::Vector3d& testpos, const int& rodaxis, const int& ortho1, const int& ortho2, const int i_parallel){
         // function to test, whether the new rod overlaps with existing rods
@@ -441,12 +455,12 @@ public:
             }
         }
         for (int l = 0; l < _rodvec[ortho1].size(); l++){
-            if (testpos(ortho2) - _rodvec[ortho1][l].coord(ortho2) < polydiam ){
+            if (abs(testpos(ortho2) - _rodvec[ortho1][l].coord(ortho2)) < polydiam ){
                 return true;
             }
         }
         for (int l = 0; l < _rodvec[ortho2].size(); l++){
-            if (testpos(ortho1) - _rodvec[ortho2][l].coord(ortho1) < polydiam ){
+            if (abs(testpos(ortho1) - _rodvec[ortho2][l].coord(ortho1)) < polydiam ){
                 return true;
             }
         }
