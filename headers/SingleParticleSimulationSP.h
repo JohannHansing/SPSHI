@@ -45,6 +45,7 @@ void createDataFolder(string testcue){
     //In the definition of folder, the addition has to START WITH A STRING! for the compiler to know what to do (left to right).
     _files.folder = "sim_data/noreset";
     if (_triggers.fitRPinv) _files.folder = _files.folder + "/fitRPinv";
+    if (_triggers.ranRod) _files.folder = _files.folder +  "/ranRod";
     if (_triggers.trueRan) _files.folder = _files.folder +  "/trueRan";
     else if (_triggers.ranSpheres) _files.folder = _files.folder +  "/ranSpheres";
     if (!testcue.empty()) _files.folder = _files.folder + "/test" + testcue;
@@ -85,6 +86,7 @@ void parameterFile(string testcue){
     if (!testcue.empty()) parameterFile << "Test cue " << testcue << endl;
     parameterFile << "fitRPinv " << _triggers.fitRPinv << endl;
     parameterFile << "ewaldCorr " << true << endl;
+    parameterFile << "ranRod " << _triggers.ranRod << endl;
     parameterFile << "ranSpheres " << _triggers.ranSpheres << endl;
     parameterFile << "trueRan " << _triggers.trueRan << endl;
     parameterFile << "noLub " << _triggers.noLub << endl;

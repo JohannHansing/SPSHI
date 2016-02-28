@@ -35,6 +35,7 @@ struct sim_triggers {
 	bool hpi;          // hpi exp
     bool ranSpheres;
     bool trueRan;
+    bool ranRod;
 };
 
 struct file_desc {

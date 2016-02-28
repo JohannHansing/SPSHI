@@ -21,6 +21,7 @@
 
 #include "CPolymers.h"
 #include "CPolySphere.h"
+#include "CRod.h"
 #include "parameter_structs.h"
 
 
@@ -55,6 +56,7 @@ private:
     bool _ranU;
     bool _hpi;
     bool _noLub;
+    bool _ranRod;
 
     //COUNTERS AND INIT VALUES
     int _boxnumberXYZ[3];           //counter to calculate the actual position of the particle
@@ -88,7 +90,9 @@ private:
     Eigen::Matrix3d _RMLub;
 	bool _HI;
 	double _polyrad;
+        double _polydiamSq;
 	int _edgeParticles;
+        double _sphereoffset;
     double _lastcheck[3];
     double _cutoffMMsq;
     double _stericrSq;
@@ -118,30 +122,36 @@ private:
 
 
     boost::mt19937 *m_igen;                      //generate instance of random number generator "twister".
+    
+    double zerotoone(){
+        boost::uniform_01<boost::mt19937&> dist(*m_igen);
+        return dist();
+    }
 
 
 
 private:
     void setRanNumberGen(double seed);
     void countWallCrossing(int crossaxis, int exitmarker);
-    void calculateExpHPI(const double r, double& U, double& Fr);
-    void calculateExpPotential(const double r, double& U, double& Fr);
-    void modifyPot(double& U, double& Fr, double dist);
-    void calcLJPot(const double r, double &U, double &dU);
-	void initConstMobilityMatrix();
-	Eigen::Matrix3d CholInvertPart (const Eigen::MatrixXd A);
-    Eigen::Matrix3d Cholesky3x3(Eigen::Matrix3d mat);
-    Eigen::Matrix3d invert3x3 (const Eigen::Matrix3d A);
-	Eigen::Matrix3d realSpcSm( const Eigen::Vector3d & rij, const bool self, const double asq );
-	Eigen::Matrix3d reciprocalSpcSm( const Eigen::Vector3d & rij, const double asq );
-	Eigen::Matrix3d realSpcM(const double & rsq, const Eigen::Vector3d & rij, const double asq);
-	Eigen::Matrix3d reciprocalSpcM(const double ksq, const Eigen::Vector3d & kij,  const double asq);
-    Eigen::Matrix3d RotnePrager( const Eigen::Vector3d & rij, const double asq);
+    void calculateExpHPI(const double& r, double& U, double& Fr);
+    void calculateExpPotential(const double& r, double& U, double& Fr);
+    void modifyPot(double& U, double& Fr, const double dist);
+    void calcLJPot(const double &r, double &U, double &dU);
+    void initConstMobilityMatrix();
+    Eigen::Matrix3d CholInvertPart (const Eigen::MatrixXd &A);
+    Eigen::Matrix3d Cholesky3x3(const Eigen::Matrix3d &mat);
+    Eigen::Matrix3d invert3x3 (const Eigen::Matrix3d &A);
+	Eigen::Matrix3d realSpcSm( const Eigen::Vector3d & rij, const bool &self, const double &asq );
+	Eigen::Matrix3d reciprocalSpcSm( const Eigen::Vector3d & rij, const double &asq );
+	Eigen::Matrix3d realSpcM(const double & rsq, const Eigen::Vector3d & rij, const double &asq);
+	Eigen::Matrix3d reciprocalSpcM(const double &ksq, const Eigen::Vector3d & kij,  const double &asq);
+    Eigen::Matrix3d RotnePrager( const Eigen::Vector3d & rij, const double & asq);
 
-	Eigen::Matrix3d lub2p( Eigen::Vector3d rij, double rsq );
+	Eigen::Matrix3d lub2p( Eigen::Vector3d &rij, double &rsq );
 	Eigen::Matrix3d lubricate( const Eigen::Vector3d & rij );
-    Eigen::Vector3d midpointScheme(Eigen::Vector3d V0dt, Eigen::Vector3d F);
-    void calcTracerMobilityMatrix(bool full);
+    Eigen::Vector3d midpointScheme(Eigen::Vector3d & V0dt, Eigen::Vector3d & F);
+    void calcTracerMobilityMatrix(const bool& full);
+    void updateMobilityMatrix();
     void initPolySpheres();
 
     void report(std::string);
@@ -260,6 +270,206 @@ private:
             _fitprrs.push_back(fitprr);
         }
     }
+    
+    // ************ RANROD ************
+    /*TODO :
+     * Implement random number rods depending on n_rods.
+     * Test if I can use C++11 on sheldon. If so, use:
+     * for(auto& s: _rodvec[plane]){
+     *    do smth with s;
+     *} 
+     * instead of  
+     * (int i=0;i<_rodvec[plane].size();i++){
+     *     do smth with _rodvec[plane][i]
+     * }
+     * for looping over arrys/vectors
+     */
+    std::array<vector<CRod> , 3> _rodvec; // vector to store polymer rods in cell, one vector stores polymers that are parallel to the same axis
+    double _n_rods = 0.5;
+    double _ntry = 5.;  // multiplier for maximum number of rods in one cell _n_max = _ntry * _n_rods
+    unsigned int avrods =0;
+    unsigned int avcount =0;
+    
+        
+    void copySphereRods(){
+        _polySpheres.clear();
+        for (int k = 0; k < 3; k++){
+            for (int r=0;r<_rodvec[k].size();r++){
+                for (int s=0;s<_rodvec[k][r].spheres.size(); s++){
+                    //TODO Maybe do this with an &, or something, to copy reference to _rodvec[k].spheres[s]
+                    _polySpheres.push_back( _rodvec[k][r].spheres[s] );
+                }
+            }
+        }
+        
+        cout << "_polySpheres.size() = " << _polySpheres.size() << endl;
+        assert(_polySpheres.size() == _rodvec[0][0].spheres.size() * (_rodvec[0].size() + _rodvec[1].size() + _rodvec[2].size())    && "Error: number of polyspheres doesnt correspond to number of rods");
+    }
+    
+public:
+    int ran_sign(){
+    // the variate generator uses _igen (int rand number generator),
+    // samples from uniform integer distribution 0, 1
+        boost::variate_generator<boost::mt19937&, boost::uniform_int<>> zeroone(*m_igen, boost::uniform_int<>(0, 1));
+	return (zeroone() * 2) - 1; //this calculation makes value either -1 or 1 
+}
+
+    void initRodsVec(){
+        Eigen::Vector3d initVec;
+        int ortho1, ortho2, retry;
+        
+        double _spheredist = _boxsize/(2*_polyrad);
+        int Nrods[3]; // number of rods in certain plane, i.e. parallel to a certain axis.
+        
+        for (int i=0;i<3;i++){
+            // allocate enough space for vector resize.
+            _rodvec[i].reserve(_ntry * 9. * _n_rods ); //9 cells per plane
+            //TODO if zerotoone()> ... MAKE Nrods[i] random
+            Nrods[i] =  9. * _n_rods;// 3x3 cells in one plane -> 9*_n_rods
+        }
+        bool overlaps = true;
+        while (overlaps==true){
+            ++retry;
+            cout << "RETRY for ranRods Init" << endl;
+            for (int axis=0;axis<3;axis++){//axis 0 is x axis.
+                ortho1 = axis+1; // No specific order of ortho1 and ortho2
+                if (ortho1 == 3) ortho1 = 0;
+                ortho2 = 3-(axis+ortho1);
+                _rodvec[axis].clear();
+                for (int i=0; i<Nrods[axis];i++){
+                    for (int count=0; count < 200; count++){
+                        overlaps = false;
+                        // SO FAR SET INITAL RODS; SUCH THAT CENTRAL CELL * 1.7 IS EMPTY! 
+                        //TODO ran_sign()*.15*zerotoone() + 0.5 + 1.35 * ran_sign() is between .15+1.35+0.5 = 2 and -.15+1.35+0.5 = 1.7 or between .15-1.35+0.5 = -0.7 and -.15-1.35+0.5 = -1
+                        initVec(ortho1) = (ran_sign()*.15*zerotoone() + 0.5 + 1.35 * ran_sign() ) *_boxsize;
+                        initVec(ortho2) = (ran_sign()*.15*zerotoone() + 0.5 + 1.35 * ran_sign() ) *_boxsize;
+                        initVec(axis) = 0;
+                        overlaps = testRodOverlap(initVec,axis,ortho1,ortho2,_rodvec[axis].size());
+                        if (overlaps==false) break;
+                    }
+                    CRod newRod = CRod(axis, initVec, 3*_edgeParticles, _sphereoffset, _boxsize );
+                    _rodvec[axis].push_back(newRod);
+                }
+            }
+            if (overlaps==true && retry != 500) break;//if after 'count' for loop still overlap -- break, and do a retry.
+            else{
+                cout << "could not find suitable rod positions on init after 500 retries." << endl;
+                throw 18;
+            }
+        }
+    }
+    
+    void updateRodsVec(const int& crossaxis, const int& exitmarker){//exitmarker is -1 for negative direction, or 1 for positive
+        //delete all polymers orthogonal to crossaxis, that are outside the box now
+        //update other polymer positions
+        int n_tries = (int) (ceil(_n_rods) * _ntry + 0.001); 
+        int ortho[2] = {1,2};
+        if (crossaxis == 1){
+            ortho[0]=2; 
+            ortho[1]=0;
+        }
+        else if (crossaxis == 2){
+            ortho[0]=0; 
+            ortho[1]=1;
+        }
+        // shift positions of rods
+        int plane;
+        bool overlaps = true;
+        int retry=0, newrods = 0;
+        Eigen::Vector3d tmpvec;
+        for (int oa=0;oa<2;oa++){
+            plane = ortho[oa];
+            //cout << "plane " << plane << endl;
+            int nrods = _rodvec[plane].size();
+            for (int i=nrods-1;i>=0;i--){//need to count beckwards, due to erase function!
+                //shift rod positions parallel to crossaxis. plane is direction that the shifted rods are parallel to.
+                _rodvec[plane][i].coord[crossaxis] -= exitmarker * _boxsize;
+                if (abs(_rodvec[plane][i].coord[crossaxis] - _boxsize/2.  ) > 1.5*_boxsize){
+                    // erase rods that have left the simulation box.
+                    //cout << _rodvec[plane].size() << " XXX ";
+                    _rodvec[plane].erase(_rodvec[plane].begin() + i);
+                    //cout << _rodvec[plane].size() << endl;
+                }
+            }
+            double reln = _n_rods / n_tries;// _n_rods / n_tries is probability of placing one of n_tries new
+            assert((reln < 1.) && "Error: reln in updateRodsVec must be smaller than 1!");
+            // erase the first 3 elements:
+            while (overlaps==true){
+                newrods=0;
+                ++retry;
+                cout << "RETRY for ranRods update" << endl;
+                _rodvec[plane].erase (_rodvec[plane].end()-newrods,_rodvec[plane].end());
+                for (int j=0;j<3*n_tries;j++){// factor 3, since I reassign 3 cells per plane
+                    if (zerotoone() < reln ){  
+                        retry = 0;
+                        for (int count=0; count < 200; count++){
+                            overlaps = false;
+                            tmpvec = Eigen::Vector3d::Zero();//Reset
+                            //in direction parallel to crossaxis, choose new position in side cell 
+                            tmpvec(crossaxis) = (zerotoone()  + exitmarker) * _boxsize;
+                            int ortho2 = 3 - (plane + crossaxis);
+                            // in direction orthogonal to both plane and crossaxis
+                            tmpvec(ortho2) = (zerotoone() * 3 -1) * _boxsize;
+                            //cout << _rodvec[plane].size() << endl;
+                            overlaps = testRodOverlap(tmpvec,plane,crossaxis,ortho2,newrods);
+                            if (overlaps==false) break;
+                        }
+                        _rodvec[plane].push_back(  CRod( plane, tmpvec, 3*_edgeParticles, _sphereoffset, _boxsize )  );
+                        ++newrods;
+                    }
+                    if (overlaps==true && retry != 100) break;//if after 'count' for loop still overlap -- break, and do a retry.
+                    else{
+                        cout << "could not find suitable rod positions in 100 retries." << endl;
+                        throw 19;
+                    }
+                }
+            }
+        }
+        copySphereRods();
+        
+        avrods += _rodvec[0].size() + _rodvec[1].size() + _rodvec[2].size();
+        avcount += 1;
+    }
+    
+    bool testRodOverlap(Eigen::Vector3d& testpos, const int& rodaxis, const int& ortho1, const int& ortho2, const int i_parallel){
+        // function to test, whether the new rod overlaps with existing rods
+        // i_parallel takes care, that only  newly created rods parallel to the testpos rod get tested, since the other lie in different cells.
+        double polydiam = _polyrad + _polyrad + 0.000001;
+        for (int l = _rodvec[rodaxis].size() - i_parallel; l < _rodvec[rodaxis].size(); l++){
+            if ((testpos - _rodvec[rodaxis][l].coord).squaredNorm() < _polydiamSq + 0.000001){
+                return true;
+            }
+        }
+        for (int l = 0; l < _rodvec[ortho1].size(); l++){
+            if (testpos(ortho2) - _rodvec[ortho1][l].coord(ortho2) < polydiam ){
+                return true;
+            }
+        }
+        for (int l = 0; l < _rodvec[ortho2].size(); l++){
+            if (testpos(ortho1) - _rodvec[ortho2][l].coord(ortho1) < polydiam ){
+                return true;
+            }
+        }
+        return false;
+    }
+    
+    
+    
+    
+    void printAvRods(){
+        cout << "nrods in yz plane mean: " << avrods/(3*avcount) << endl;
+    }
+    
+    void prinRodPos(int axis){
+        for (int irod=0;irod<_rodvec[axis].size();irod++){
+            double rx = _rodvec[axis][irod].coord(0);
+            double ry =_rodvec[axis][irod].coord(1);     
+            double rz =_rodvec[axis][irod].coord(2);
+            cout << ",[" << rx << "," << ry << "," << rz << "]";
+        }
+        cout << "]," << endl;
+    }
+    
 
 };
 

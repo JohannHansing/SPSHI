@@ -22,6 +22,7 @@ int main(int argc, const char* argv[]){
     _triggers.fitRPinv = (strcmp(argv[2] , "true") == 0 ) ;
     _triggers.ranSpheres = (strcmp(argv[3] , "ranSpheres") == 0  || strcmp(argv[3] , "trueRan") == 0) ;
     _triggers.trueRan = (strcmp(argv[3] , "trueRan") == 0 ) ;
+    _triggers.ranRod = (strcmp(argv[3] , "ranRod") == 0 ) ;
     _triggers.recordPosHisto = (strcmp(argv[4] , "true") == 0 ) ;
     _triggers.noLub = (strcmp(argv[5] , "true") == 0 ) ;
     _triggers.includeSteric = (strcmp(argv[6] , "true") == 0 ) ;  // steric 2
@@ -88,6 +89,11 @@ int main(int argc, const char* argv[]){
     if (!_triggers.includeSteric && _triggers.noLub) {
         _triggers.includeSteric = true;
         cout << "!!! WARNING: Lubrication is disabled.\nActivating steric interaction!!";
+    }
+    if (_triggers.ranRod && _modelpar.n_cells !=1){
+    
+        cout << "Error: _triggers.ranRod && _modelpar.n_cells != 1" << endl;
+        return 4;
     }
 
 
@@ -241,7 +247,10 @@ int main(int argc, const char* argv[]){
             // end steric
 
 
-            if (boxcheck==1 || stepcheck==1) return 1; // If boxcrossing is out of range stop program execution!
+            if (boxcheck==1 || stepcheck==1){
+                cout << "Error: boxcheck==1 or stepcheck==1." << endl;
+                return 1; // If boxcrossing is out of range stop program execution!
+            }
 
             stepcount++;
             if (stepcount%trajout == 0) {
