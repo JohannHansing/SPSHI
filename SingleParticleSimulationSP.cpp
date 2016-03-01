@@ -74,7 +74,7 @@ int main(int argc, const char* argv[]){
     //HI
     if (_modelpar.polymersize != 0){
         HI = true;
-    
+
         if (_triggers.fitRPinv == true){
             std::string filename = "../rfitInvRP.py"; // The python script should lie in the folder "above" Release, i.e. where the C++ files are, such that it is tracked by git
             std::string command = "python ";
@@ -91,10 +91,14 @@ int main(int argc, const char* argv[]){
         cout << "!!! WARNING: Lubrication is disabled.\nActivating steric interaction!!";
     }
     if (_triggers.ranRod && _modelpar.n_cells !=1){
-    
         cout << "Error: _triggers.ranRod && _modelpar.n_cells != 1" << endl;
         return 4;
     }
+if (_triggers.ranRod && _modelpar.ustrength !=0){
+        cout << "Error: _triggers.ranRod && _modelpar.ustrength !=0.\ncalcmobility forces not yet implemented" << endl;
+        return 4;
+    }
+
 
 
 

@@ -17,9 +17,7 @@
 
 #include <Eigen/Dense>
 #include <Eigen/Cholesky>
-//TESTING
 #include <Eigen/IterativeLinearSolvers>
-
 
 #include "CPolymers.h"
 #include "CPolySphere.h"
@@ -142,7 +140,6 @@ private:
     void calcLJPot(const double &r, double &U, double &dU);
     void initConstMobilityMatrix();
     Eigen::Matrix3d CholInvertPart (const Eigen::MatrixXd &A);
-    //TESTING
     Eigen::Matrix3d ConjGradInvert(const Eigen::MatrixXd &A);
     Eigen::Matrix3d Cholesky3x3(const Eigen::Matrix3d &mat);
     Eigen::Matrix3d invert3x3 (const Eigen::Matrix3d &A);
@@ -307,7 +304,7 @@ private:
             }
         }
         
-        cout << "_polySpheres.size() = " << _polySpheres.size() << endl;
+        //cout << "_polySpheres.size() = " << _polySpheres.size() << endl;
         assert(_polySpheres.size() == _rodvec[0][0].spheres.size() * (_rodvec[0].size() + _rodvec[1].size() + _rodvec[2].size())    && "Error: number of polyspheres doesnt correspond to number of rods");
     }
     
@@ -410,7 +407,7 @@ public:
                 _rodvec[plane].erase (_rodvec[plane].end()-newrods,_rodvec[plane].end());
                 newrods=0;
                 ++retry;
-                cout << "RETRY for ranRods update" << endl;
+                //cout << "RETRY for ranRods update" << endl;
                 for (int j=0;j<3*n_tries;j++){// factor 3, since I reassign 3 cells per plane
                     if (zerotoone() < reln ){  
                         retry = 0;

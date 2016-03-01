@@ -248,8 +248,8 @@ int CConfiguration::checkBoxCrossing(){
             if (_ranU) _poly.shiftPolySign(i, exitmarker);
             if (_ranRod){
                 updateRodsVec(i, exitmarker);
-                cout << "[["<<i<<"," << exitmarker <<"] ";
-                prinRodPos(0); // cout print rod pos!
+                //cout << "[["<<i<<"," << exitmarker <<"] ";
+                //prinRodPos(0); // cout print rod pos!
                 updateMobilityMatrix();
             }
             if (_ppos(i) > _boxsize){
@@ -505,7 +505,19 @@ bool CConfiguration::testOverlap(){
         return false;
     }
 
-
+    if (_ranRod){
+        Vector3d testpos;
+        for (int axis=0;axis<3;axis++){
+            testpos = _ppos;
+            testpos(axis) = 0.;
+            for (int l = 0; l < _rodvec[axis].size(); l++){
+                if ((testpos - _rodvec[axis][l].coord).squaredNorm() < _stericrSq + 0.000001){
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
 
 
     double r_i = 0, r_k = 0;
@@ -1032,8 +1044,8 @@ Matrix3d CConfiguration::lub2p( Vector3d &rij, double &rsq){
 
 
 Matrix3d CConfiguration::ConjGradInvert(const MatrixXd &A){
-    MatrixXd x,I = MatrixXd::Identity(A.rows(),3);
-    ConjugateGradient<MatrixXd, Lower|Upper> cg;
+    MatrixXd I = MatrixXd::Identity(A.rows(),3);
+    ConjugateGradient<MatrixXd, Lower|Upper > cg;
     cg.setTolerance( 0.00001 );
     cg.compute(A);
     _prevCG = cg.solveWithGuess(I,_prevCG);
