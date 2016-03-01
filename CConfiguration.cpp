@@ -1207,7 +1207,30 @@ int CConfiguration::resetposition(){
 
 //----------------------- Rotne Prager ------------------------
 
-
+// matrix<double> CConfiguration::RotnePragerYamakawa(const double & _r, const double & _rsq,
+//                                                    const ublas::vector<double> & _rij) {
+//     // overlap testing if activated..
+//     if (_r < 2.0) {
+//         matrix<double> I = identity_matrix<double>(3);
+//         // overlap detected
+//         double c1 = 1. - 0.28125 * _r;                        //(1. - (9. / 32.) * _r / ( m_a));
+//         return c1*I + (0.09375/_r) * outer_prod(_rij, _rij);    //c1*I + (3./(32.*m_a*_r)) * outer_prod(_rij, _rij);
+//     } else {
+//         // no overlap
+//         return RotnePrager(_r, _rsq, _rij);
+//     }
+// }
+//
+// matrix<double> CConfiguration::RotnePrager(const double & _r, const double & _rsq,
+//                                            const ublas::vector<double> & _rij) {
+//     matrix<double> I = identity_matrix<double>(3);
+//
+//
+//     double c1 = 0.75 / _r;     //3. * m_a / (4. * _r);
+//     double c3 = 2. / _rsq;        //2. * m_a * m_a / _rsq;
+//     double c2 = c3 / 3.;
+//     return c1*( (1.+c2)*I + prod( (1.-c3)*I , matrix<double>(outer_prod(_rij,_rij)) / _rsq));
+// }
 
 
 /*
