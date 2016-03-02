@@ -149,9 +149,9 @@ private:
 	Eigen::Matrix3d reciprocalSpcM(const double &ksq, const Eigen::Vector3d & kij,  const double &asq);
     Eigen::Matrix3d RotnePrager( const Eigen::Vector3d & rij, const double & asq);
 
-	Eigen::Matrix3d lub2p( Eigen::Vector3d &rij, double &rsq );
+	Eigen::Matrix3d lub2p(const Eigen::Vector3d &rij, const double &rsq );
 	Eigen::Matrix3d lubricate( const Eigen::Vector3d & rij );
-    Eigen::Vector3d midpointScheme(Eigen::Vector3d & V0dt, Eigen::Vector3d & F);
+    Eigen::Vector3d midpointScheme(const Eigen::Vector3d & V0dt,const  Eigen::Vector3d & F);
     void calcTracerMobilityMatrix(const bool& full);
     void updateMobilityMatrix();
     void initPolySpheres();

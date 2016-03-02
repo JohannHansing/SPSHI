@@ -141,10 +141,10 @@ void CConfiguration::checkDisplacementforMM(){
 
 }
 
-Vector3d CConfiguration::midpointScheme(Vector3d & V0dt, Vector3d & F){
+Vector3d CConfiguration::midpointScheme(const Vector3d & V0dt, const Vector3d & F){
     // Implementation of midpoint scheme according to Banchio2003
     Vector3d ppos_prime;
-    int n = 100;
+    const double n = 100;
     ppos_prime = _ppos + V0dt / n;
 
     Vector3d vec_rij;
@@ -168,7 +168,7 @@ Vector3d CConfiguration::midpointScheme(Vector3d & V0dt, Vector3d & F){
     //cout <<"V_primedt\n" <<  V_primedt << endl; // TODO del
 
     // return V_drift * dt
-    return n/2 * (V_primedt - V0dt);
+    return n/2. * (V_primedt - V0dt);
 
 }
 
@@ -982,16 +982,16 @@ Matrix3d  CConfiguration::lubricate( const Vector3d & rij ){
     return lubPart;
 }
 
-Matrix3d CConfiguration::lub2p( Vector3d &rij, double &rsq){
+Matrix3d CConfiguration::lub2p(const Vector3d &rij, const double &rsq){
     // This function returns the 3x3 SELF-lubrication part of the resistance matrix of the tracer particle, i.e. A_{11} in Jeffrey1984
-    unsigned int mmax = _fXm.size();
+    const unsigned int mmax = _fXm.size();
 
-    double s = 2*sqrt(rsq)/(_pradius + _polyrad);
-    Matrix3d rrT = rij * rij.transpose() / rsq;
-    Matrix3d I = Matrix3d::Identity();
+    const double s = 2*sqrt(rsq)/(_pradius + _polyrad);
+    const Matrix3d rrT = rij * rij.transpose() / rsq;
+    const Matrix3d I = Matrix3d::Identity();
     // cout << "\ns " << s << endl;
-    double sinv = 1./s;
-    double c1 = 4.*sinv*sinv;//= pow(2/s,2)
+    const double sinv = 1./s;
+    const double c1 = 4.*sinv*sinv;//= pow(2/s,2)
     double c1pows[mmax];
     c1pows[0] = 1;
     for (int m = 1; m < mmax; m++){
@@ -1007,8 +1007,8 @@ Matrix3d CConfiguration::lub2p( Vector3d &rij, double &rsq){
     }
     Sum2 = Sum2 * _g[0];
     // cout << "Sum1: " << Sum1 << " $$$$ Sum2: " << Sum2 << endl;
-    double c3 = - ( _g[1] + _g[2] * ( 1 - c1 ) ) * log( 1 - c1 );
-    double c4 = ( _g[0]/(1-c1) - _g[0] +  2*c3  +  2*Sum1  +  Sum2 ) ;
+    const double c3 = - ( _g[1] + _g[2] * ( 1 - c1 ) ) * log( 1 - c1 );
+    const double c4 = ( _g[0]/(1-c1) - _g[0] +  2*c3  +  2*Sum1  +  Sum2 ) ;
 
     // Long-Range part added 07.01.2016
     double Sum3 = 0, Sum4 = 0;
@@ -1017,7 +1017,7 @@ Matrix3d CConfiguration::lub2p( Vector3d &rij, double &rsq){
         Sum4 += c1pows[m] * _fXm[m];
     }
     // End Long-Range part 
-    Matrix3d lubR = I * (c3 + Sum1 + Sum3) + rrT * ( c4 + Sum4 - Sum3 );
+    const Matrix3d lubR = I * (c3 + Sum1 + Sum3) + rrT * ( c4 + Sum4 - Sum3 );
     
 
     //Here, i am subtracting the 2paricle RP part
