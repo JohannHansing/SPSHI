@@ -287,7 +287,7 @@ private:
      * for looping over arrys/vectors
      */
     std::array<vector<CRod> , 3> _rodvec; // vector to store polymer rods in cell, one vector stores polymers that are parallel to the same axis
-    double _n_rods = 1;
+    double _n_rods = 1.;
     double _ntry = 1.;  // multiplier for maximum number of rods in one cell _n_max = _ntry * _n_rods
     unsigned int avrods =0;
     unsigned int avcount =0;
@@ -343,11 +343,14 @@ public:
                         overlaps = false;
                         // SO FAR SET INITAL RODS; SUCH THAT CENTRAL CELL * 1.7 IS EMPTY! 
                         //TODO ran_sign()*.15*zerotoone() + 0.5 + 1.35 * ran_sign() is between .15+1.35+0.5 = 2 and -.15+1.35+0.5 = 1.7 or between .15-1.35+0.5 = -0.7 and -.15-1.35+0.5 = -1
-                        double centerspace = (_pradius+_polyrad) / _boxsize;
-                        double halfsidespace = (1.5 - centerspace)/2;
-                        double middleofsidespace = halfsidespace + centerspace;
-                        initVec(ortho1) = (ran_sign()*zerotoone()*halfsidespace + 0.5 + middleofsidespace * ran_sign() ) *_boxsize;
-                        initVec(ortho2) = (ran_sign()*zerotoone()*halfsidespace + 0.5 + middleofsidespace * ran_sign() ) *_boxsize;
+                        const double centerspace = (_pradius+_polyrad) / _boxsize;
+                        const double sidespace = (1.5 - centerspace);
+                        //double halfsidespace = (1.5 - centerspace)/2;
+                        //double middleofsidespace = halfsidespace + centerspace;
+                        initVec(ortho1) = (0.5 + ran_sign()*(  centerspace + zerotoone()*sidespace)) *_boxsize;
+                        initVec(ortho2) = (0.5 + ran_sign()*(  centerspace + zerotoone()*sidespace)) *_boxsize;
+                        //initVec(ortho1) = (0.5 + ran_sign()*zerotoone()*halfsidespace + middleofsidespace * ran_sign() ) *_boxsize;
+                        //initVec(ortho2) = (0.5 + ran_sign()*zerotoone()*halfsidespace + middleofsidespace * ran_sign() ) *_boxsize;
                         initVec(axis) = 0;
                         overlaps = testRodOverlap(initVec,axis,ortho1,ortho2,_rodvec[axis].size());
                         if (overlaps==false) break;
@@ -445,7 +448,7 @@ public:
     }
     
     
-    bool testRodOverlap(Eigen::Vector3d& testpos, const int& rodaxis, const int& ortho1, const int& ortho2, const int i_parallel){
+    bool testRodOverlap(const Eigen::Vector3d& testpos, const int& rodaxis, const int& ortho1, const int& ortho2, const int& i_parallel){
         // function to test, whether the new rod overlaps with existing rods
         // i_parallel takes care, that only  newly created rods parallel to the testpos rod get tested, since the other lie in different cells.
         double polydiam = _polyrad + _polyrad + 0.000001;
@@ -467,6 +470,8 @@ public:
         return false;
     }
     
+    void testIfSpheresAreOnRods()
+    
     
     
     
@@ -484,6 +489,15 @@ public:
         cout << "]," << endl;
     }
     
+    void overlapreport(){
+        Eigen::Vector3d vrij;
+        for (unsigned int j = 0; j < _polySpheres.size(); j++){
+            vrij = minImage(_prevpos - _polySpheres[j].pos);
+            if (vrij.squaredNorm() <= _stericrSq + 0.00001){
+                cout << "OVErLAP!!!!!!!!!!!!!!" << endl;
+            }
+        }
+    }
 
 };
 

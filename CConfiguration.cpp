@@ -227,6 +227,7 @@ void CConfiguration::report(string reason){
     cout << "_resMNoLub:\n" << _resMNoLub << endl;
     cout << "_RMLub\n" << _RMLub << endl;
     cout << "Cholesky3x3(_RMLub)\n" << Cholesky3x3(_RMLub) << endl;
+    overlapreport();
 }
 
 int CConfiguration::checkBoxCrossing(){
@@ -512,6 +513,7 @@ bool CConfiguration::testOverlap(){
             testpos(axis) = 0.;
             for (int l = 0; l < _rodvec[axis].size(); l++){
                 if ((testpos - _rodvec[axis][l].coord).squaredNorm() < _stericrSq + 0.000001){
+                    cout << "overlaps! ppos = " << _ppos(0) << ", " << _ppos(1) << ", " << _ppos(2) << endl;
                     return true;
                 }
             }
@@ -583,7 +585,6 @@ void CConfiguration::initPolySpheres(){
     // ****** RANDOM RODS *******
     //_edgeParticles stays the same
     if (_ranRod){
-        _polySpheres.clear();
         copySphereRods();
     }
     
@@ -766,6 +767,7 @@ void CConfiguration::calcTracerMobilityMatrix(const bool& full){
     if (full){
         //TESTING
          _resMNoLub = ConjGradInvert(_mobilityMatrix);
+         //_resMNoLub = CholInvertPart(_mobilityMatrix);
          //Matrix3d diffmat = _resMNoLub - CholInvertPart(_mobilityMatrix);
          //cout << "----\n" << diffmat << endl;
          //if (_resMNoLub(2,0) < 0.0001 || _resMNoLub(2,0) < 0.0001  ){
