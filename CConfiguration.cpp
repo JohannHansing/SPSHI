@@ -84,7 +84,7 @@ CConfiguration::CConfiguration( double timestep, model_param_desc modelpar, sim_
     if (_ranSpheres && _boxsize > 10) _cutoffMMsq = pow(0.025*_boxsize,2);
     if (_polyrad != 0) _HI = true;
     if (_EwaldTest != 0) _edgeParticles = _EwaldTest;
-    else _edgeParticles = (int) ( ( _boxsize/_n_cellsAlongb )/modelpar.polymersize + 0.001);
+    else _edgeParticles = (int) ( ( _boxsize/_n_cellsAlongb )/modelpar.polymersize + 0.0001);// round down
     _sphereoffset = (_boxsize/_n_cellsAlongb) / _edgeParticles;
     if (_ranRod) initRodsVec();//Needs to be before initPolySpheres!
     initPolySpheres();
@@ -179,6 +179,8 @@ int CConfiguration::makeStep(){
     _Vdriftdt = Vector3d::Zero();
 
     _prevpos = _ppos;
+    //TODO del
+    if ((_prevpos - _ppos).squaredNorm() > 5) cout << "large Jump" << endl;
 
     bool v_nan = true;
     bool lrgDrift = true;
@@ -218,6 +220,7 @@ int CConfiguration::makeStep(){
 void CConfiguration::report(string reason){
     cout << "~*~*~*~*~*~     ALERT ALERT !  ~*~*~*~*~*~" << endl;
     cout << "----------------------------------------------------\n-------------------  "<<reason<<"  -------------\n----------------------------------------------------\n";
+    cout << "_edgeParticles " << _edgeParticles << endl;
     cout << "_ppos: " << _ppos(0) << ", " << _ppos(1) << ", " << _ppos(2) << endl;
     cout << "_prevpos: " << _prevpos(0) << ", " << _prevpos(1) << ", " << _prevpos(2) << endl;
     cout << "_tracerMM: " << endl << _tracerMM << endl << " - " << endl;
@@ -228,6 +231,7 @@ void CConfiguration::report(string reason){
     cout << "_RMLub\n" << _RMLub << endl;
     cout << "Cholesky3x3(_RMLub)\n" << Cholesky3x3(_RMLub) << endl;
     overlapreport();
+    testIfSpheresAreOnRods();
 }
 
 int CConfiguration::checkBoxCrossing(){
@@ -251,7 +255,6 @@ int CConfiguration::checkBoxCrossing(){
                 updateRodsVec(i, exitmarker);
                 //cout << "[["<<i<<"," << exitmarker <<"] ";
                 //prinRodPos(0); // cout print rod pos!
-                updateMobilityMatrix();
             }
             if (_ppos(i) > _boxsize){
                 cout << "Error: _ppos is outside of allowed range 0 < _ppos < _boxsize!";
@@ -385,7 +388,7 @@ void CConfiguration::saveXYZTraj(string name, const int& move, string a_w){
     Vector3d rtmp;
     FILE *f = fopen(name.c_str(), a_w.c_str());
 
-    if (!_ranSpheres){
+    if (!(_ranSpheres || _ranRod)){
         fprintf(f, "%d\n%s (%8.3f %8.3f %8.3f) t=%d \n", 1, "sim_name", _boxsize, _boxsize, _boxsize, move);
     }
     else fprintf(f, "%d\n%s (%8.3f %8.3f %8.3f) t=%d \n", _polySpheres.size() + 1, "sim_name", _boxsize, _boxsize, _boxsize, move);
@@ -393,8 +396,8 @@ void CConfiguration::saveXYZTraj(string name, const int& move, string a_w){
     // tracer particle
     rtmp = _ppos;//+boxCoordinates;
     fprintf(f, "%3s%9.3f%9.3f%9.3f \n","O", rtmp(0), rtmp(1),  rtmp(2));   // relative position in box
-    
-    if (_EwaldTest != 0){
+
+    if (_ranSpheres || _ranRod){
         for (unsigned int i = 0; i < _polySpheres.size(); i++) {
             rtmp = _polySpheres[i].pos;//+boxCoordinates;
             fprintf(f, "%3s%9.3f%9.3f%9.3f \n","H", rtmp(0), rtmp(1),  rtmp(2));
@@ -513,7 +516,7 @@ bool CConfiguration::testOverlap(){
             testpos(axis) = 0.;
             for (int l = 0; l < _rodvec[axis].size(); l++){
                 if ((testpos - _rodvec[axis][l].coord).squaredNorm() < _stericrSq + 0.000001){
-                    cout << "overlaps! ppos = " << _ppos(0) << ", " << _ppos(1) << ", " << _ppos(2) << endl;
+                    //cout << "overlaps! ppos = " << _ppos(0) << ", " << _ppos(1) << ", " << _ppos(2) << endl;
                     return true;
                 }
             }
@@ -581,22 +584,22 @@ void CConfiguration::initPolySpheres(){
             }
         }
     }
-    
+
     // ****** RANDOM RODS *******
     //_edgeParticles stays the same
     if (_ranRod){
         copySphereRods();
     }
-    
-    
-    
-    // *******   RANSPHERE  ******** 
+
+
+
+    // *******   RANSPHERE  ********
     bool overlap = true;
     Vector3d vrij;
     Vector3d spos;
-    
+
     int Nspheres = _n_cellsAlongb * _n_cellsAlongb * _n_cellsAlongb;
-    
+
     if (_ranSpheres){ // This serves to assign a random position to the edgeparticles. Note: Only use it with _EwaldTest = 1!
         int retry = 0;
         while (overlap==true && retry < 100){
@@ -654,7 +657,7 @@ void CConfiguration::initPolySpheres(){
             throw 2;
         }
     }
-    
+
 }
 
 //**************************** HYDRODYNAMICS ****************************************************//
@@ -665,7 +668,7 @@ void CConfiguration::initConstMobilityMatrix(){
 
     // create mobility matrix - Some elements remain constant throughout the simulation. Those are stored here.
     _mobilityMatrix = MatrixXd::Identity( 3 * (_polySpheres.size() + 1) , 3 * (_polySpheres.size() + 1) );
-    
+
     // Create matrix that stores previous result of conjugate gradient method, for faster conversion.
     _prevCG = Eigen::MatrixXd::Identity(3 * (_polySpheres.size() + 1) , 3 );
 
@@ -699,6 +702,7 @@ void CConfiguration::initConstMobilityMatrix(){
 
 
     // The mobility matrix elements for the interacting edgeParticles are stored here, since they do not change position
+    Matrix3d muij = Matrix3d::Zero();
     for (unsigned int i = 0; i < _polySpheres.size(); i++){
         unsigned int i_count = 3 * (i + 1);       // plus 1 is necessary due to omitted tracer particle
 
@@ -709,7 +713,6 @@ void CConfiguration::initConstMobilityMatrix(){
         /*
          * Calculation of RP Ewald sum
          */
-            Matrix3d muij = Matrix3d::Zero();
             if (_ranRod) muij = RotnePrager(vec_rij, asq);
             else if (_noEwald) muij = RotnePrager( minImage(vec_rij), asq );
             else muij = realSpcSm( vec_rij, false, asq ) + reciprocalSpcSm( vec_rij, asq );
@@ -728,14 +731,13 @@ void CConfiguration::initConstMobilityMatrix(){
 
 
 void CConfiguration::calcTracerMobilityMatrix(const bool& full){
-    const double asq = (_polyrad * _polyrad + _pradius * _pradius)/2;
+    const double asq = (_polyrad * _polyrad + _pradius * _pradius)/2.;
 
     // vector for outer product in muij
-    Vector3d vec_rij(3);
+    Vector3d vec_rij;
     double rij_sq;
     Matrix3d lubM = Matrix3d::Zero();
     Matrix3d muij;
-    double bhalf = _boxsize/2.;
 
 // loop over tracer - particle mobility matrix elements
     for (unsigned int j = 0; j < _polySpheres.size(); j++){
@@ -743,9 +745,9 @@ void CConfiguration::calcTracerMobilityMatrix(const bool& full){
         if (_noEwald) vec_rij = minImage(vec_rij);
         //vec_rij = minImage(vec_rij); // tmpminim
         rij_sq = vec_rij.squaredNorm();
-        if (rij_sq <= (_stericrSq + 0.000001)){ // If there is overlap between particles, the distance is set to a very small value, according to Brady and Bossis in Phung1996
+        if (rij_sq <= (_stericrSq + 0.0001)){ // If there is overlap between particles, the distance is set to a very small value, according to Brady and Bossis in Phung1996
             // set distance to 0.00000001 + _stericr but preserve direction
-            double corr = (0.000001 + sqrt(_stericrSq)) / sqrt(rij_sq);
+            double corr = (0.0001 + sqrt(_stericrSq)) / sqrt(rij_sq);
             vec_rij *= corr;
         }
 
@@ -798,30 +800,43 @@ void CConfiguration::calcTracerMobilityMatrix(const bool& full){
 
 
 void CConfiguration::updateMobilityMatrix(){// ONLY for ranRod, since I dont have pbc.
-    const double asq = _polyrad * _polyrad;
+    const double asq = _polyrad * _polyrad + 0.001;//TODO del this should be without 0.000001
     Matrix3d muij = Matrix3d::Zero();
     unsigned int i_count, j_count;
 
+    // create mobility matrix - Some elements remain constant throughout the simulation. Those are stored here.
+    _mobilityMatrix = MatrixXd::Identity( 3 * (_polySpheres.size() + 1) , 3 * (_polySpheres.size() + 1) );
+
+    // resize matrix that stores previous result of conjugate gradient method, for faster conversion.
+    _prevCG = Eigen::MatrixXd::Identity(3 * (_polySpheres.size() + 1) , 3 );
+
     // Eigen-vector for interparticle distance. Needs to initialized as zero vector for self mobilities.
     Vector3d vec_rij = Vector3d::Zero();
-    
+
     //TODO maybe store i_count and j_count first.
     //const int Nspheres = _polySpheres.size()
     //std::array<int, _polySpheres.size()> icount_arr;
-    
+
     //Update the polymer Spheres mobility matrix elements
     for (unsigned int i = 0; i < _polySpheres.size(); i++){
         i_count = 3 * (i + 1);       // plus 1 is necessary due to omitted tracer particle
+        // PolySphere Self interaction
+        _mobilityMatrix.block<3,3>(i_count,i_count) *= _pradius/_polyrad;
 
+        // Tracer-polySphere RP
+        vec_rij = _ppos - _polySpheres[i].pos;
+        muij = RotnePrager( vec_rij, asq );
+        _mobilityMatrix.block<3,3>(i_count,0) = muij;
+        _mobilityMatrix.block<3,3>(0,i_count) = muij;
+
+
+        // PolySphere - PolySphere RP
         for (unsigned int j = i + 1; j < _polySpheres.size(); j++) {
             vec_rij = _polySpheres[i].pos - _polySpheres[j].pos;
             j_count = 3 * (j + 1);    // plus 1 is necessary due to omitted tracer particle
 
-        /*
-         * Calculation of RP
-         */
             muij = RotnePrager(vec_rij, asq);
-            
+
             // both lower and upper triangular of symmetric matrix need be filled
             _mobilityMatrix.block<3,3>(j_count,i_count) = muij;
             _mobilityMatrix.block<3,3>(i_count,j_count) = muij;
@@ -940,6 +955,13 @@ Matrix3d CConfiguration::RotnePrager(const Vector3d & rij, const double & asq) {
     const double rsq = rij.squaredNorm();
     const double r = sqrt(rsq);
 
+    //TODO del
+    if (rsq<pow(2*_polyrad,2)){
+        cout << "Too small poly disctance in RP!\nasq = "<< asq << "\nr = "<< r <<  endl;
+        testIfSpheresAreOnRods();
+        overlapreport();
+    }
+
 
     return _pradius * 3. / ( 4 * r ) * ( ( 1. + 2. * asq / (3. * rsq )) * I + ( 1. - 2.* asq / rsq ) * rij*rij.transpose() / rsq );
 }
@@ -966,9 +988,9 @@ Matrix3d  CConfiguration::lubricate( const Vector3d & rij ){
                 rsq = rn_vec.squaredNorm();
                 if ( rsq <= _cutofflubSq ){
                     // if (rsq < _cutofflubSq/2){
-                               
+
                     //         //double corr = sqrt((0.0000001 + _stericrSq)/rsq);
-                    //         
+                    //
                     //         //cout << "######################## correction! ################" << endl;
                     //         //rn_vec *= corr;
                     //     }
@@ -1018,9 +1040,9 @@ Matrix3d CConfiguration::lub2p(const Vector3d &rij, const double &rsq){
         Sum3 += c1pows[m] * _fYm[m];
         Sum4 += c1pows[m] * _fXm[m];
     }
-    // End Long-Range part 
+    // End Long-Range part
     const Matrix3d lubR = I * (c3 + Sum1 + Sum3) + rrT * ( c4 + Sum4 - Sum3 );
-    
+
 
     //Here, i am subtracting the 2paricle RP part
     Matrix3d RPinv;
@@ -1040,7 +1062,7 @@ Matrix3d CConfiguration::lub2p(const Vector3d &rij, const double &rsq){
         _RP2p.block<3,3>(3,0) = _RP2p.block<3,3>(0,3);
         RPinv = CholInvertPart( _RP2p );
     }
-    
+
     return lubR - RPinv;
 }
 
@@ -1052,7 +1074,7 @@ Matrix3d CConfiguration::ConjGradInvert(const MatrixXd &A){
     cg.compute(A);
     _prevCG = cg.solveWithGuess(I,_prevCG);
     //_prevCG = x;//temp. make this _prevCG = cg.solveWithGuess(I,_prevCG);
-    
+
     return _prevCG.block<3,3>(0,0);
 }
 

@@ -57,18 +57,18 @@ int main(int argc, const char* argv[]){
     _modelpar.EwaldTest = atoi( argv[boolpar+13] );  // index to set the number of polymer particles. Default is EwaldTest = 0!
     _modelpar.nmax = atoi( argv[boolpar+14] ); // This corresponds to the r_cutoff = _nmax * _boxsize
     _modelpar.lubcutint = atoi( argv[boolpar+15] );
-    
+
     //default values! atoi returns zero, if no valid number is given (which is good).
     if (_modelpar.lubcutint == 0) _modelpar.lubcutint = 9;
     if (_modelpar.nmax == 0) _modelpar.nmax = 3;
     if (_modelpar.n_cells == 0) _modelpar.n_cells = 1;
-    
+
     // first argument must be the name of the parameter file
     // read_run_params(("../jobs/input/" + toString(argv[1]) + ".txt").c_str());
-    
-        
+
+
     int instValIndex;                             //Counter for addInstantValue
-    
+
     double HI = false;
 
     //HI
@@ -128,7 +128,7 @@ if (_triggers.ranRod && _modelpar.ustrength !=0){
     //Create data folders and print location as string to string "folder"
     //TODO struct createDataFolder does not return a folder anymore
     createDataFolder(conf.getTestCue());
-    
+
 
     //initialize averages
     CAverage energyU = CAverage("Upot", _files.folder, _simpar.instantvalues, _simpar.runs);
@@ -262,8 +262,8 @@ if (_triggers.ranRod && _modelpar.ustrength !=0){
 
         }
         if ( _triggers.recordPosHisto ) conf.printHistoMatrix(_files.folder);
-        
-        if (l%100 == 0)  cout << "run " << toString(l) << endl;  
+
+        if (l%100 == 0)  cout << "run " << toString(l) << endl;
     }//----------END OF RUNS-LOOP ----------------
 
 
@@ -288,7 +288,7 @@ if (_triggers.ranRod && _modelpar.ustrength !=0){
 	end = clock();
 	double runtime = (double)((end-start)/(CLOCKS_PER_SEC));
 	cout << runtime << " seconds runtime." << endl;
-    
+
     //TODO struct parametereFileAppend does not take folder as argument anymore
     parameterFileAppend(runtime);
 

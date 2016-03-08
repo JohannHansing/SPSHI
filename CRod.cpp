@@ -20,8 +20,7 @@ CRod::CRod(const int& ax, const Eigen::Vector3d& initvec, const int& Nspheres, c
     Eigen::Vector3d spherepos = coord;
     spherepos(axis) = -boxsize;
     for (int i=0;i<Nspheres;i++){
-        spherepos(2) += spheredist;
         spheres.push_back( CPolySphere(spherepos));
+        spherepos(axis) += spheredist;
     }
 }
-

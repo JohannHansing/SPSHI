@@ -26,9 +26,15 @@ public:
     int axis; // rod parallel to axis 0 = x, axis 1 = y, etc.
     Eigen::Vector3d coord; // Coordinate of rod in 2D plane orthogonal to axis. the coord parallel to axis is always 0. (see initiaion)
     std::vector<CPolySphere> spheres;
-    
+
     CRod();
-    CRod(const int& ax, const Eigen::Vector3d& initvec, const int& Nspheres, const double& spheredist, const double& boxsize);
+    CRod(const int& ax, const Eigen::Vector3d & initvec, const int& Nspheres, const double& spheredist, const double& boxsize);
+
+    void shiftspheres(int crossaxis, double shift){
+        for (int i=0; i<spheres.size(); i++){
+            spheres[i].pos(crossaxis) += shift;
+        }
+    }
 };
 
 
