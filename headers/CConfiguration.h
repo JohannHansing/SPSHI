@@ -466,8 +466,8 @@ public:
                             if (overlaps==false) break;
                         }
                         if (overlaps==true){//if there is still overlap after the 'count' for loop -- break out of j loop, and do a retry.
-                            if (retry == 100){
-                                cout << "could not find suitable rod positions at update after 100 retries." << endl;
+                            if (retry == 300){
+                                cout << "could not find suitable rod positions at update after 300 retries." << endl;
                                 cout << "Rod numbers were:\n" << _rodvec[0].size() << " ++ " << _rodvec[1].size() << " ++ " << _rodvec[2].size() << endl;
                                 throw 18;
                             }
@@ -597,6 +597,14 @@ public:
                 }
             }
         }
+    }
+    
+    void moveBackReport(){
+        cout << "_ppos: " << _ppos(0) << ", " << _ppos(1) << ", " << _ppos(2) << endl;
+        cout << "_prevpos: " << _prevpos(0) << ", " << _prevpos(1) << ", " << _prevpos(2) << endl;
+        cout << "Cholesky3x3(_RMLub)\n" << Cholesky3x3(_RMLub) << endl;
+        cout << "_f_mob\n" << _f_mob << endl << "_f_sto\n" << _f_sto << endl;
+        cout << "_f_sto\n" << _f_mob << endl << "_f_sto\n" << _f_sto << endl;
     }
 
 };

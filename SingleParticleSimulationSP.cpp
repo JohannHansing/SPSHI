@@ -242,12 +242,18 @@ if (_triggers.ranRod && _modelpar.ustrength !=0){
             */ // end steric2
 
                 //TODO steric
+			int cnt=0;
             while (_triggers.includeSteric && conf.testOverlap()){
                 conf.moveBack();
                 conf.calcStochasticForces();
                 stepcheck = conf.makeStep();
                 //TODO del
-                ifdebug (cout << "moveBack! ";)
+                ifdebug ((cout << "moveBack!") && conf.moveBackReport();)
+                cnt++;
+                if (cnt==300){
+                cout << "Bad particle position. Cannot avoid overlap with moveBack." << endl;
+                return 4;
+                }
             }
             boxcheck = conf.checkBoxCrossing(); //check if particle has crossed the confinement of the box
             // end steric

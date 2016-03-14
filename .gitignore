@@ -1,3 +1,7 @@
+relwithdebuginfo/
+before
+after
+perf*
 #gnuplot#
 SingleParticleSim
 write_sheldon_scripts.sh
