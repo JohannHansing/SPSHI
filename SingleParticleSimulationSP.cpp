@@ -2,7 +2,7 @@
 #include "headers/SingleParticleSimulationSP.h"
 
 using namespace std;
-#define ifdebug(x) 
+#define ifdebug(x)  x
 
 //ISSUES:
 //Size of int large enough for large numbers such as steps???
@@ -188,7 +188,8 @@ if (_triggers.ranRod && _modelpar.ustrength !=0){
 
         for (int i = 0; i < _simpar.steps; i++){  //calculate stochastic force first, then mobility force!!
             //TODO del
-            //cout << i;
+            if (i%50==0) cout << i;
+            ifdebug(cout << i;)
             // calc HI mobility matrix here, since it needs to be defined for random force normalisation
 
             if (HI){ // Calculate displacement and update mobilityMatrix if it is larger than 0.1*tracer Radius
@@ -242,16 +243,17 @@ if (_triggers.ranRod && _modelpar.ustrength !=0){
             */ // end steric2
 
                 //TODO steric
-			int cnt=0;
+            int cnt=0;
             while (_triggers.includeSteric && conf.testOverlap()){
                 conf.moveBack();
                 conf.calcStochasticForces();
                 stepcheck = conf.makeStep();
                 //TODO del
-                ifdebug ((cout << "moveBack!") && conf.moveBackReport();)
+                ifdebug ((cout << "moveBack!"); conf.moveBackReport();)
                 cnt++;
                 if (cnt==300){
                 cout << "Bad particle position. Cannot avoid overlap with moveBack." << endl;
+                conf.saveXYZTraj(("tmptrajMakeStepErr.xyz"), 0, "w");
                 return 4;
                 }
             }

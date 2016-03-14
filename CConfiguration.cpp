@@ -100,7 +100,7 @@ CConfiguration::CConfiguration( double timestep, model_param_desc modelpar, sim_
     _testcue = "";
     //TODO newrods -  Only create as many newrods as were deleted
     cout << "NOTE: Fixed number of rods in plane as 9*nrods!" << endl;
-    if (_ranRod) _testcue += "/fixnrods0.5";
+    if (_ranRod) _testcue += "/fixnrods1";
     if ( _noEwald ) _testcue += "/noEwald";
     if ( _EwaldTest > 0 ) _testcue += "/EwaldTest" + toString(_EwaldTest);
     if ( _n_cellsAlongb != 1 ){
@@ -303,6 +303,7 @@ void CConfiguration::calcStochasticForces(){
         // return correlated random vector, which is scaled later by sqrt(2 dt)
         //_f_sto = _RMLub.llt().matrixL() * ran_v;
         _f_sto = Cholesky3x3(_RMLub)  * ran_v;
+        //cout << "\n" << _tracerMM * Cholesky3x3(_RMLub) << "\n===========\n" << Cholesky3x3(_tracerMM) << endl;
     }
 
     else { // no HI

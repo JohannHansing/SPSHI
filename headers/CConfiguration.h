@@ -604,8 +604,8 @@ public:
         cout << "_prevpos: " << _prevpos(0) << ", " << _prevpos(1) << ", " << _prevpos(2) << endl;
         cout << "Cholesky3x3(_RMLub)\n" << Cholesky3x3(_RMLub) << endl;
         cout << "_f_mob\n" << _f_mob << endl << "_f_sto\n" << _f_sto << endl;
-        cout << "_f_sto\n" << _f_mob << endl << "_f_sto\n" << _f_sto << endl;
     }
+    
 
 };
 
