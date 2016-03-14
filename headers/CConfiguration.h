@@ -478,8 +478,8 @@ public:
                             if (overlaps==false) break;
                         }
                         if (overlaps==true){//if there is still overlap after the 'count' for loop -- break out of j loop, and do a retry.
-                            if (retry == 100){
-                                cout << "could not find suitable rod positions at update after 100 retries." << endl;
+                            if (retry == 300){
+                                cout << "could not find suitable rod positions at update after 300 retries." << endl;
                                 cout << "Rod numbers were:\n" << _rodvec[0].size() << " ++ " << _rodvec[1].size() << " ++ " << _rodvec[2].size() << endl;
                                 throw 18;
                             }

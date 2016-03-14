@@ -515,7 +515,7 @@ bool CConfiguration::testOverlap(){
             testpos = _ppos;
             testpos(axis) = 0.;
             for (int l = 0; l < _rodvec[axis].size(); l++){
-                if ((testpos - _rodvec[axis][l].coord).squaredNorm() < _stericrSq + 0.000001){
+                if ((testpos - _rodvec[axis][l].coord).squaredNorm() < _stericrSq + 0.0001){
                     //cout << "overlaps! ppos = " << _ppos(0) << ", " << _ppos(1) << ", " << _ppos(2) << endl;
                     return true;
                 }
@@ -800,7 +800,7 @@ void CConfiguration::calcTracerMobilityMatrix(const bool& full){
 
 
 void CConfiguration::updateMobilityMatrix(){// ONLY for ranRod, since I dont have pbc.
-    const double asq = _polyrad * _polyrad + 0.001;//TODO del this should be without 0.000001
+    const double asq = _polyrad * _polyrad + 0.0001;//TODO del this should be without 0.000001
     Matrix3d muij = Matrix3d::Zero();
     unsigned int i_count, j_count;
 
@@ -976,29 +976,38 @@ Matrix3d  CConfiguration::lubricate( const Vector3d & rij ){
     Vector3d rn_vec(3);
     double rsq;
 //     for (int n1 = -1; n1 <= 1; n1++){
-    double values_1[3] = {rij(0) - _boxsize, rij(0), rij(0) + _boxsize};
-    double values_2[3] = {rij(1) - _boxsize, rij(1), rij(1) + _boxsize};
-    double values_3[3] = {rij(2) - _boxsize, rij(2), rij(2) + _boxsize};
-    for (int n1 = 0; n1 < 3; n1++) {
-        rn_vec(0) = values_1[n1];
-        for (int n2 = 0; n2 < 3; n2++) {
-            rn_vec(1) = values_2[n2];
-            for (int n3 = 0; n3 < 3; n3++) {
-                rn_vec(2) = values_3[n3];
-                rsq = rn_vec.squaredNorm();
-                if ( rsq <= _cutofflubSq ){
-                    // if (rsq < _cutofflubSq/2){
+    if (_ranRod){
+        rsq = rij.squaredNorm();
+        if (rsq <= 0.00001 + _stericrSq){
+            rsq = 0.00001 + _stericrSq;
+        }
+        lubPart = lub2p(rij, rsq); // Only this, to avoid problems with different mmax for Long-Range lubrication in lub2p (i.e. Sum3 and Sum4)
+    }
+    else{
+        double values_1[3] = {rij(0) - _boxsize, rij(0), rij(0) + _boxsize};
+        double values_2[3] = {rij(1) - _boxsize, rij(1), rij(1) + _boxsize};
+        double values_3[3] = {rij(2) - _boxsize, rij(2), rij(2) + _boxsize};
+        for (int n1 = 0; n1 < 3; n1++) {
+            rn_vec(0) = values_1[n1];
+            for (int n2 = 0; n2 < 3; n2++) {
+                rn_vec(1) = values_2[n2];
+                for (int n3 = 0; n3 < 3; n3++) {
+                    rn_vec(2) = values_3[n3];
+                    rsq = rn_vec.squaredNorm();
+                    if ( rsq <= _cutofflubSq ){
+                        // if (rsq < _cutofflubSq/2){
 
-                    //         //double corr = sqrt((0.0000001 + _stericrSq)/rsq);
-                    //
-                    //         //cout << "######################## correction! ################" << endl;
-                    //         //rn_vec *= corr;
-                    //     }
-                    // If there is overlap between particles, the distance is set to a very small value, according to Brady and Bossis in Phung1996
-                    if (rsq <= 0.00001 + _stericrSq){
-                        rsq = 0.00001 + _stericrSq;
+                        //         //double corr = sqrt((0.0000001 + _stericrSq)/rsq);
+                        //
+                        //         //cout << "######################## correction! ################" << endl;
+                        //         //rn_vec *= corr;
+                        //     }
+                        // If there is overlap between particles, the distance is set to a very small value, according to Brady and Bossis in Phung1996
+                        if (rsq <= 0.00001 + _stericrSq){
+                            rsq = 0.00001 + _stericrSq;
+                        }
+                        lubPart += lub2p(rn_vec, rsq); // Only this, to avoid problems with different mmax for Long-Range lubrication in lub2p (i.e. Sum3 and Sum4)
                     }
-                    lubPart += lub2p(rn_vec, rsq); // Only this, to avoid problems with different mmax for Long-Range lubrication in lub2p (i.e. Sum3 and Sum4)
                 }
             }
         }
