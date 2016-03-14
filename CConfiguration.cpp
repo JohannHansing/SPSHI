@@ -97,7 +97,10 @@ CConfiguration::CConfiguration( double timestep, model_param_desc modelpar, sim_
     }
 
     // TEST CUE to modify the directory the output data is written to!!
-    _testcue = "/CG/ntry1/nrods1";
+    _testcue = "";
+    //TODO newrods -  Only create as many newrods as were deleted
+    cout << "NOTE: Fixed number of rods in plane as 9*nrods!" << endl;
+    if (_ranRod) _testcue += "/fixnrods0.5";
     if ( _noEwald ) _testcue += "/noEwald";
     if ( _EwaldTest > 0 ) _testcue += "/EwaldTest" + toString(_EwaldTest);
     if ( _n_cellsAlongb != 1 ){
@@ -164,8 +167,6 @@ Vector3d CConfiguration::midpointScheme(const Vector3d & V0dt, const Vector3d & 
 
     // Note that _f_sto has variance sqrt( _tracerMM ), as it is advised in the paper of Banchio2003
     Vector3d V_primedt = tracerMM_prime * (F * _timestep + _f_sto * _mu_sto);
-    //cout <<"tracerMM_prime\n" <<  tracerMM_prime << endl; // TODO del
-    //cout <<"V_primedt\n" <<  V_primedt << endl; // TODO del
 
     // return V_drift * dt
     return n/2. * (V_primedt - V0dt);
@@ -179,8 +180,6 @@ int CConfiguration::makeStep(){
     _Vdriftdt = Vector3d::Zero();
 
     _prevpos = _ppos;
-    //TODO del
-    if ((_prevpos - _ppos).squaredNorm() > 5) cout << "large Jump" << endl;
 
     bool v_nan = true;
     bool lrgDrift = true;
@@ -238,7 +237,7 @@ int CConfiguration::checkBoxCrossing(){
     //should the particle cross the confinement of the cube, let it appear on the opposite side of the box
     int exitmarker = 0;
     for (int i = 0; i < 3; i++){
-        if (_ppos(i) < 0){
+        if (_ppos(i) < 0.){
             _ppos(i) += _boxsize;
             _boxnumberXYZ[i] -= 1;
             exitmarker = -1;
@@ -682,7 +681,7 @@ void CConfiguration::initConstMobilityMatrix(){
     if (!_ranRod && !_noEwald) _mobilityMatrix.block<3,3>(0,0) = selfmob + Matrix3d::Identity() * self_plus; // ewaldCorr
 
     // now on diagonals for POLYMER SPHERES
-    const double asq = _polyrad * _polyrad;
+    const double asq = 2 * _polyrad * _polyrad;
     selfmob = realSpcSm( vec_rij, true, asq ) + reciprocalSpcSm( vec_rij, asq );
     // double self_plus = _pradius/_polyrad + _pradius / sqrt (M_PI) * ( - 6. * _alpha );  //TODO  alt
     self_plus = _pradius/_polyrad + _pradius / sqrt (M_PI) * ( - 6. * _alpha + 40. * pow(_alpha,3) * _polyrad * _polyrad / 3. );
@@ -716,9 +715,6 @@ void CConfiguration::initConstMobilityMatrix(){
             if (_ranRod) muij = RotnePrager(vec_rij, asq);
             else if (_noEwald) muij = RotnePrager( minImage(vec_rij), asq );
             else muij = realSpcSm( vec_rij, false, asq ) + reciprocalSpcSm( vec_rij, asq );
-    //      cout << vec_rij << endl;
-    //      cout << muij << endl; // TODO del
-    //      cout << "real: " << realSpcSm( vec_rij, false ) << " ---- reciprocal: " << reciprocalSpcSm( vec_rij, false ) << endl;
 
             // both lower and upper triangular of symmetric matrix need be filled
             _mobilityMatrix.block<3,3>(j_count,i_count) = muij;
@@ -731,7 +727,7 @@ void CConfiguration::initConstMobilityMatrix(){
 
 
 void CConfiguration::calcTracerMobilityMatrix(const bool& full){
-    const double asq = (_polyrad * _polyrad + _pradius * _pradius)/2.;
+    const double asq = (_polyrad * _polyrad + _pradius * _pradius);
 
     // vector for outer product in muij
     Vector3d vec_rij;
@@ -800,7 +796,7 @@ void CConfiguration::calcTracerMobilityMatrix(const bool& full){
 
 
 void CConfiguration::updateMobilityMatrix(){// ONLY for ranRod, since I dont have pbc.
-    const double asq = _polyrad * _polyrad + 0.001;//TODO del this should be without 0.000001
+    const double asq = 2. *_polyrad * _polyrad + 0.001;//TODO del this should be without 0.000001
     Matrix3d muij = Matrix3d::Zero();
     unsigned int i_count, j_count;
 
@@ -951,21 +947,38 @@ Matrix3d  CConfiguration::reciprocalSpcM(const double& ksq, const Vector3d & kij
 //------------------------------------- Rotne-Prager ---------------------------------------
 
 Matrix3d CConfiguration::RotnePrager(const Vector3d & rij, const double & asq) {
+    // source http://www.fuw.edu.pl/~piotrek/publications/different_sized.pdf.
     Matrix3d  I = Matrix3d::Identity();
     const double rsq = rij.squaredNorm();
     const double r = sqrt(rsq);
 
     //TODO del
-    if (rsq<pow(2*_polyrad,2)){
-        cout << "Too small poly disctance in RP!\nasq = "<< asq << "\nr = "<< r <<  endl;
+    if (r<2*_polyrad){
+        cout << "Too small poly distance in RP!\nasq = "<< asq << "\nr = "<< r <<  endl;
         testIfSpheresAreOnRods();
         overlapreport();
     }
 
-
-    return _pradius * 3. / ( 4 * r ) * ( ( 1. + 2. * asq / (3. * rsq )) * I + ( 1. - 2.* asq / rsq ) * rij*rij.transpose() / rsq );
+    const double c1 = asq / rsq;
+    return _pradius * .75 /  r  * ( ( 1. + 0.3333 * c1 ) * I + ( 1. - c1 ) * rij*rij.transpose() / rsq );
+    // return _pradius * 3. / ( 4 * r ) * ( ( 1. + 2. * asq / (3. * rsq )) * I + ( 1. - 2.* asq / rsq ) * rij*rij.transpose() / rsq );
 }
 
+
+// Matrix3d CConfiguration::RotPragYamPolySphere(const Vector3d & rij, const double & asq) {
+//     // ONLY FOR SAME SIZE PARTICLES, i.e. polyspheres
+//     // source http://www.fuw.edu.pl/~piotrek/publications/different_sized.pdf.
+//     // overlap testing if activated..
+//     if (_r < ) {
+//         matrix<double> I = identity_matrix<double>(3);
+//         // overlap detected               //(1. - (9. / 32.) * _r / ( m_a));
+//         return 1. - 0.28125 * r/ *I + (0.09375/_r) * outer_prod(rij, rij);    //c1*I + (3./(32.*m_a*_r)) * outer_prod(_rij, _rij);
+//     } 
+//     else {
+//         // no overlap
+//         return RotnePrager(_r, _rsq, _rij);
+//     }
+// }
 
 //------------------------------------- Lubrication Resistance Matrix ------------------------------
 
@@ -1231,19 +1244,7 @@ int CConfiguration::resetposition(){
 
 //----------------------- Rotne Prager ------------------------
 
-// matrix<double> CConfiguration::RotnePragerYamakawa(const double & _r, const double & _rsq,
-//                                                    const ublas::vector<double> & _rij) {
-//     // overlap testing if activated..
-//     if (_r < 2.0) {
-//         matrix<double> I = identity_matrix<double>(3);
-//         // overlap detected
-//         double c1 = 1. - 0.28125 * _r;                        //(1. - (9. / 32.) * _r / ( m_a));
-//         return c1*I + (0.09375/_r) * outer_prod(_rij, _rij);    //c1*I + (3./(32.*m_a*_r)) * outer_prod(_rij, _rij);
-//     } else {
-//         // no overlap
-//         return RotnePrager(_r, _rsq, _rij);
-//     }
-// }
+
 //
 // matrix<double> CConfiguration::RotnePrager(const double & _r, const double & _rsq,
 //                                            const ublas::vector<double> & _rij) {

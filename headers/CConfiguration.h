@@ -295,8 +295,8 @@ private:
      * for looping over arrys/vectors
      */
     std::array<vector<CRod> , 3> _rodvec; // vector to store polymer rods in cell, one vector stores polymers that are parallel to the same axis
-    double _n_rods = 1.;
-    double _n_rods_max = 1.;  // multiplier for maximum number of rods in one cell _n_max = _n_rods_max * _n_rods
+    double _n_rods = 1;
+    double _n_rods_max = 1;  // multiplier for maximum number of rods in one cell _n_max = _n_rods_max * _n_rods
     int _n_tries = (int) (ceil(_n_rods) * _n_rods_max + 0.001);
     double _reln = _n_rods / _n_tries;// _n_rods / n_tries is probability of placing one of n_tries new
     unsigned int _N_rods = 0;
@@ -400,7 +400,8 @@ public:
         //delete all polymers orthogonal to crossaxis, that are outside the box now
         //update other polymer positions
         //TODO del
-        //cout << "=======================\ncrossaxis and exitmarker: "<< crossaxis << " " << exitmarker << endl;
+        cout << "=======================\ncrossaxis and exitmarker: "<< crossaxis << " " << exitmarker << endl;
+        cout << "_N_rods = " << _N_rods << endl;
         int ortho[2];
         ortho[0] = crossaxis + 1;
         if (ortho[0] == 3) ortho[0] = 0;
@@ -422,31 +423,16 @@ public:
             // int nrods = _rodvec[plane].size();
             // for (int i=nrods-1;i>=0;i--){//need to count beckwards, due to erase function!
             //     //shift rod positions parallel to crossaxis. plane is direction that the shifted rods are parallel to.
-            //     //TODO del
-            //     cout << "-----\n" << _rodvec[plane].at(i).coord(crossaxis) << endl;
             //     _rodvec[plane].at(i).coord(crossaxis) += - exitmarker * _boxsize;
-            //     //TODO del
-            //     cout << _rodvec[plane].at(i).coord(crossaxis) << endl;
             //     if (abs(_rodvec[plane].at(i).coord(crossaxis) - _boxsize/2.  ) > 1.5*_boxsize){
             //         // erase rods that have left the simulation box.
-            //         //cout << _rodvec[plane].size() << " XXX ";
             //         _rodvec[plane].erase(_rodvec[plane].begin() + i);
-            //         //TODO del
-            //         cout << "del" << endl;
-            //         //cout << _rodvec[plane].size() << endl;
             //     }
             // }
             for (int i=0;i<_rodvec[plane].size();i++){
                 //shift rod positions parallel to crossaxis. plane is direction that the shifted rods are parallel to.
                 _rodvec[plane].at(i).shiftspheres( crossaxis, - exitmarker * _boxsize);
             }
-            //TODO del
-            // for (int i=0;i<_rodvec[plane].size();i++){
-            //     for (int s = 0; s < _rodvec[plane][i].spheres.size(); s++){
-            //         Eigen::Vector3d spos = _rodvec[plane][i].spheres[s].pos;
-            //         cout << "spherepos " << spos(0) << " "  << spos(1) << " " << spos(2) << endl;
-            //     }
-            // }
         }
         //Then create new
         for (int oa=0;oa<2;oa++){
@@ -464,7 +450,9 @@ public:
                 //cout << "after _rodvec[plane].size() = " << _rodvec[plane].size() << endl;
                 ++retry;
                 //cout << "RETRY for ranRods update" << endl;
-                for (int j=0;j<3*_n_tries;j++){// factor 3, since I reassign 3 cells per plane
+                //for (int j=0;j<3*_n_tries;j++){// factor 3, since I reassign 3 cells per plane
+                //TODO newrods -  Only create as many newrods as were deleted
+                for (int j=sizeb4new;j< (9*_n_rods);j++){
                     if (zerotoone() < _reln ){
                         for (int count=0; count < 200; count++){
                             tmpvec = Eigen::Vector3d::Zero();//Reset
@@ -502,8 +490,6 @@ public:
         copySphereRods();
 
         _N_rods = _rodvec[0].size() + _rodvec[1].size() + _rodvec[2].size();
-        //TODO del
-        //cout << "_N_rods = " << _N_rods << endl;
         avrods += _N_rods;
         avcount += 1;
     }

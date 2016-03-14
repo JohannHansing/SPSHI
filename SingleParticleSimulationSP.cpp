@@ -2,6 +2,7 @@
 #include "headers/SingleParticleSimulationSP.h"
 
 using namespace std;
+#define ifdebug(x) 
 
 //ISSUES:
 //Size of int large enough for large numbers such as steps???
@@ -186,6 +187,8 @@ if (_triggers.ranRod && _modelpar.ustrength !=0){
         //if (l%100==0) cout << "run " << l << endl;
 
         for (int i = 0; i < _simpar.steps; i++){  //calculate stochastic force first, then mobility force!!
+            //TODO del
+            //cout << i;
             // calc HI mobility matrix here, since it needs to be defined for random force normalisation
 
             if (HI){ // Calculate displacement and update mobilityMatrix if it is larger than 0.1*tracer Radius
@@ -243,6 +246,8 @@ if (_triggers.ranRod && _modelpar.ustrength !=0){
                 conf.moveBack();
                 conf.calcStochasticForces();
                 stepcheck = conf.makeStep();
+                //TODO del
+                ifdebug (cout << "moveBack! ";)
             }
             boxcheck = conf.checkBoxCrossing(); //check if particle has crossed the confinement of the box
             // end steric
