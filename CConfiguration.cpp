@@ -237,15 +237,15 @@ void CConfiguration::report(string reason){
 
 int CConfiguration::checkBoxCrossing(){
     //should the particle cross the confinement of the cube, let it appear on the opposite side of the box
-    int exitmarker = 0;
     for (int i = 0; i < 3; i++){
+        int exitmarker = 0;
         if (_ppos(i) < 0.){
             _ppos(i) += _boxsize;
             _boxnumberXYZ[i] -= 1;
             exitmarker = -1;
 
         }
-        else if (_ppos(i) > _boxsize){
+        else if (_ppos(i) >= _boxsize){
             _ppos(i) -= _boxsize;
             _boxnumberXYZ[i] += 1;
             exitmarker = 1;
@@ -264,6 +264,8 @@ int CConfiguration::checkBoxCrossing(){
             }
         }
     }
+    //TODO del
+    overlapreport();
     return 0;
 }
 

@@ -312,7 +312,7 @@ private:
 
 
     void copySphereRods(){
-        _polySpheres.clear();
+        _polySpheres.resize(0);
         for (int k = 0; k < 3; k++){
             for (int r=0;r<_rodvec[k].size();r++){
                 for (int s=0;s<_rodvec[k][r].spheres.size(); s++){
@@ -478,6 +478,11 @@ public:
                             else break;
                         }
                         _rodvec[plane].push_back(  CRod( plane, tmpvec, 3*_edgeParticles, _sphereoffset, _boxsize )  );
+                        //TODO del
+                        // if (testRodTracerOverlap(tmpvec,plane) == true){
+                        //     cout << "Overlap between new rod and tracer" << endl;
+                        //     cout << "rodaxis = " << plane << " -- rodpos\n" << tmpvec << endl;
+                        // }
                     }
                     // NO AXIS LOOP HERE! if (overlaps==true) break;//if there is still overlap after the 'i' for loop -- break out of axis loop, and do a retry.
                 }
@@ -492,10 +497,22 @@ public:
             // }
         }
         copySphereRods();
+        //TODO del
+        overlapreport();
 
         _N_rods = _rodvec[0].size() + _rodvec[1].size() + _rodvec[2].size();
         avrods += _N_rods;
         avcount += 1;
+    }
+
+    bool testRodTracerOverlap(Eigen::Vector3d rodpos, int axis){
+        Eigen::Vector3d testpos = _ppos;
+        testpos(axis) = 0.;
+        if ((testpos - rodpos).squaredNorm() < _stericrSq + 0.000001){
+            //cout << "overlaps! ppos = " << _ppos(0) << ", " << _ppos(1) << ", " << _ppos(2) << endl;
+            return true;
+        }
+        return false;
     }
 
 
@@ -571,7 +588,7 @@ public:
         for (unsigned int j = 0; j < _polySpheres.size(); j++){
             vrij = (_prevpos - _polySpheres[j].pos);
             if (vrij.squaredNorm() <= _stericrSq ){
-                cout << "!!!!!!!!!!!!! OVErLAP!!  -- TRACER - POLYSPHERE" << endl;
+                cout << vrij.norm() << " !!!!!!!!!!!!! OVErLAP!!  -- TRACER - POLYSPHERE\nsphereindex " << j << endl;
             }
         }
         for (unsigned int i = 0; i < _polySpheres.size(); i++){
@@ -588,7 +605,7 @@ public:
             testpos(axis) = 0.;
             for (int l = 0; l < _rodvec[axis].size(); l++){
                 if ((testpos - _rodvec[axis][l].coord).squaredNorm() < _stericrSq + 0.000001){
-                    cout << "!!!!!!!!!!!!! OVErLAP!!  -- TRACER - ROD" << endl;
+                    cout << (testpos - _rodvec[axis][l].coord).norm() << " !!!!!!!!!!!!! OVErLAP!!  -- TRACER - ROD\nIn plane " << axis << "\nrod number " << l << endl;
                 }
             }
         }
