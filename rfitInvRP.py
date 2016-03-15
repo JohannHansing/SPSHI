@@ -31,7 +31,7 @@ def getInvRP(rvec,p,a,i=0,j=0,full=False):
         return (LA.inv(RP2p)[:3,:3])
     return (LA.inv(RP2p)[:3,:3])[i,j]
 
-def getPrefactors(rij,p,a):    
+def getPrefactors(rij,p,a):
     rr = np.outer(rij,rij) / rij.dot(rij)
     pref_rr = getInvRP(rij,p,a,0,1) / rr[0,1]   # This is correct!
     pref_I = (getInvRP(rij,p,a,0,0) - pref_rr * rr[0,0])
@@ -40,6 +40,10 @@ def getPrefactors(rij,p,a):
 def fpoly(x, a, b, c, d, e, f, g, h):
     x = np.asarray(x)
     return a + b*x**-1 + c*x**-2 + d*x**-3 + e*x**-4 + f*x**-5 + g*x**-6 + h*x**-7
+
+def fpoly2(x, a, b, c, d, e, f, g, h):
+    x = np.asarray(x)
+    return a + b*x**-2 + c*x**-4 + d*x**-6 + e*x**-8 + f*x**-10 + g*x**-12 + h*x**-14
 
 # fpoly = np.vectorize(fpoly)
 
@@ -51,7 +55,7 @@ def fitRPinv(a,p):
     s_store = []
     r_store = []
     gets = lambda r: 4.*r/(a+p)
-    lam = a/p 
+    lam = a/p
     #TODO change this so simply an r array or something, since the results only depend on r not on the vector
     for x in np.arange(0.001,15*(a+p)/2,0.025*(a+p)):
         vec = np.array([x,0.001,(a+p)/2])
@@ -79,4 +83,3 @@ lam, rfitpI, rfitprr = fitRPinv(a=float(a),p=float(p))
 for i in range(len(rfitpI)):
     Fitfile.write( str(rfitpI[i]) + ' ' + str(rfitprr[i]) + '\n' )
 Fitfile.close()
-

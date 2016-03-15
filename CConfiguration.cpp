@@ -6,6 +6,7 @@ using namespace Eigen;
 using namespace std;
 
 const double _6root2 = 1.122462;
+const double _srqtPi = sqrt (M_PI);
 
 
 CConfiguration::CConfiguration(){
@@ -42,6 +43,7 @@ CConfiguration::CConfiguration( double timestep, model_param_desc modelpar, sim_
     _hpi = triggers.hpi;
     _hpi_u = modelpar.hpi_u;
     _hpi_k = modelpar.hpi_k;
+    _binv = 2./_boxsize;
     for (int i = 0; i < 3; i++){
         _ppos(i) = _resetpos;
         _startpos(i) = _resetpos;
@@ -79,7 +81,7 @@ CConfiguration::CConfiguration( double timestep, model_param_desc modelpar, sim_
     _EwaldTest = modelpar.EwaldTest; // Predefine _edgeParticles. Ewaldtest = 0 runs normal. Ewaldtest = 1 runs the program with only spheres in the corners of the cells, i.e. _edgeParticles = 1, EwaldTest = 2 with 2 edgeparticles, and so on
     _noEwald = false;       // noEwald to use normal Rotne Prager instead of Ewald summed one
 
-    _V = pow( _boxsize, 3 );
+    _Vinv = 1./pow( _boxsize, 3 );
     _cutoffMMsq = pow(0.05*_boxsize/_n_cellsAlongb,2);
     if (_ranSpheres && _boxsize > 10) _cutoffMMsq = pow(0.025*_boxsize,2);
     if (_polyrad != 0) _HI = true;
@@ -923,12 +925,12 @@ Matrix3d  CConfiguration::realSpcM(const double & rsq, const Vector3d & rij, con
     const double c3 = alphasq * alphasq * rsq;
     const double c4 = 1./rsq;
     const double c5 = asq/rsq;
-    const double expc = exp(-c1)/sqrt (M_PI) * alpha;
+    const double expc = exp(-c1)/_srqtPi * alpha;
     const double erfcc = erfc(alpha * r) / r;
 
     return _pradius * ( I * ( erfcc *  ( 0.75 + 0.5 * c5 )
         + expc * (3. * c1 - 4.5 + asq * ( c2 - 20. * c3 + 14. * alphasq + c4 )))
-            + (rij*rij.transpose()) / rsq * (
+            + (rij*rij.transpose()) * c4 * (
                 erfcc * ( 0.75 - 1.5 * c5 ) +
                     expc * ( 1.5 - 3. * c1 + asq * (- c2 + 16. * c3 - 2. * alphasq - 3. * c4))));
 }
@@ -938,9 +940,12 @@ Matrix3d  CConfiguration::reciprocalSpcM(const double& ksq, const Vector3d & kij
     Matrix3d  I = Matrix3d::Identity();
     const double alphasq = _alpha * _alpha;
     const double c1 = ksq / ( 4. * alphasq );
+    const double ksqInv = 1./ksq;
 
-    return _pradius * ( 1. - 0.333333 * asq * ksq ) * ( 1. + c1 + 2. * c1 * c1 ) * ( 6. * M_PI / (ksq * _V)) * exp( -c1 )
-        * ( I - (kij*kij.transpose())/ksq);
+    return _pradius * ( 1. - 0.333333 * asq * ksq ) * ( 1. + c1 + 2. * c1 * c1 ) * ( 6. * M_PI * ksqInv * _Vinv) * exp( -c1 )
+        * ( I - (kij*kij.transpose()) * ksqInv);
+    // return _pradius * ( 1. - 0.333333 * asq * ksq ) * ( 1. + c1 + 2. * c1 * c1 ) * ( 6. * M_PI / (ksq * _V)) * exp( -c1 )
+    //     * ( I - (kij*kij.transpose())/ksq);
         //alternative way from Brady1988 TODO alt
     // return _pradius  * ( 1. + c1 + 2. * c1 * c1 ) * ( 6. * M_PI / (ksq * V)) * exp( - c1 ) * ( I - (kij*kij.transpose())/ksq);
 }
@@ -952,6 +957,7 @@ Matrix3d CConfiguration::RotnePrager(const Vector3d & rij, const double & asq) {
     Matrix3d  I = Matrix3d::Identity();
     const double rsq = rij.squaredNorm();
     const double r = sqrt(rsq);
+    const double rInv = 1./r;
 
     //TODO del
     if (r<2*_polyrad){
@@ -960,8 +966,8 @@ Matrix3d CConfiguration::RotnePrager(const Vector3d & rij, const double & asq) {
         overlapreport();
     }
 
-    const double c1 = asq / rsq;
-    return _pradius * .75 /  r  * ( ( 1. + 0.3333 * c1 ) * I + ( 1. - c1 ) * rij*rij.transpose() / rsq );
+    const double c1 = asq * rInv * rInv;
+    return _pradius * .75 * rInv  * ( ( 1. + 0.3333 * c1 ) * I + ( 1. - c1 ) * rij*rij.transpose() * rInv* rInv );
     // return _pradius * 3. / ( 4 * r ) * ( ( 1. + 2. * asq / (3. * rsq )) * I + ( 1. - 2.* asq / rsq ) * rij*rij.transpose() / rsq );
 }
 
@@ -974,7 +980,7 @@ Matrix3d CConfiguration::RotnePrager(const Vector3d & rij, const double & asq) {
 //         matrix<double> I = identity_matrix<double>(3);
 //         // overlap detected               //(1. - (9. / 32.) * _r / ( m_a));
 //         return 1. - 0.28125 * r/ *I + (0.09375/_r) * outer_prod(rij, rij);    //c1*I + (3./(32.*m_a*_r)) * outer_prod(_rij, _rij);
-//     } 
+//     }
 //     else {
 //         // no overlap
 //         return RotnePrager(_r, _rsq, _rij);
@@ -1045,16 +1051,25 @@ Matrix3d CConfiguration::lub2p(const Vector3d &rij, const double &rsq){
         c1pows[m] = c1 * c1pows[m-1];
     }
     // cout << "c1 " << c1 << endl;
-    double Sum1 = - c1 * ( _g[2] + _g[1] );
+    double Sum1 = 0;
     double Sum2 = c1;
+
+    double c3 = 0;
     // cout << "Sum1: " << Sum1 << " $$$$ Sum2: " << Sum2 << endl;
+    if (s<3) {
+        Sum1 = - c1 * ( _g[2] + _g[1] );
+        for (int m = 2; m < mmax; m++){
+            Sum1 += c1pows[m]/(m*(m-1)) * ( _g[2] - (m-1)*_g[1]);
+        }
+        c3 = - ( _g[1] + _g[2] * ( 1 - c1 ) ) * log( 1 - c1 );
+    }
     for (int m = 2; m < mmax; m++){
-        Sum1 += c1pows[m]/m * ( _g[2]/(m-1) - _g[1]);
+        //Sum1 += c1pows[m]/m * ( _g[2]/(m-1) - _g[1]);
         Sum2 += c1pows[m];
     }
     Sum2 = Sum2 * _g[0];
     // cout << "Sum1: " << Sum1 << " $$$$ Sum2: " << Sum2 << endl;
-    const double c3 = - ( _g[1] + _g[2] * ( 1 - c1 ) ) * log( 1 - c1 );
+    //const double c3 = - ( _g[1] + _g[2] * ( 1 - c1 ) ) * log( 1 - c1 );
     const double c4 = ( _g[0]/(1-c1) - _g[0] +  2*c3  +  2*Sum1  +  Sum2 ) ;
 
     // Long-Range part added 07.01.2016

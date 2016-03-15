@@ -2,7 +2,7 @@
 #include "headers/SingleParticleSimulationSP.h"
 
 using namespace std;
-#define ifdebug(x)  x
+#define ifdebug(x)  
 
 //ISSUES:
 //Size of int large enough for large numbers such as steps???
@@ -188,7 +188,7 @@ if (_triggers.ranRod && _modelpar.ustrength !=0){
 
         for (int i = 0; i < _simpar.steps; i++){  //calculate stochastic force first, then mobility force!!
             //TODO del
-            if (i%50==0) cout << i;
+            //if (i%50==0) cout << i;
             ifdebug(cout << i;)
             // calc HI mobility matrix here, since it needs to be defined for random force normalisation
 

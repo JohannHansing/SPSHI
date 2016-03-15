@@ -116,7 +116,7 @@ private:
     std::vector<double> _fXm;
     std::vector<double> _fYm;
     double _cutofflubSq;
-    double _V;
+    double _Vinv;
     Eigen::Matrix<double, 6, 6> _RP2p;
     std::vector<double> _fitpIs;
     std::vector<double> _fitprrs;
@@ -206,13 +206,17 @@ public:
     string getTestCue(){ return _testcue; };
 
 
+    double _binv;
     Eigen::Vector3d minImage(Eigen::Vector3d rij){
         // returns disctance vector with minimal image convention.
-        Eigen::Vector3d rij_rem;
-        for (int i=0;i<3;i++){
-            rij_rem(i) = remainder(rij(i),_boxsize);
+        int abc[3];
+        Eigen::Vector3d minvec = rij;
+        for (int p=0;p<3;p++){
+            abc[p]= minvec(p)*(_binv);
+            minvec(p) -= abc[p] * _boxsize;
+            abc[p]= minvec(p)*(_binv);
+            minvec(p) -= abc[p] * _boxsize;
         }
-        return rij_rem;
     }
 
 private:
@@ -598,14 +602,14 @@ public:
             }
         }
     }
-    
+
     void moveBackReport(){
         cout << "_ppos: " << _ppos(0) << ", " << _ppos(1) << ", " << _ppos(2) << endl;
         cout << "_prevpos: " << _prevpos(0) << ", " << _prevpos(1) << ", " << _prevpos(2) << endl;
         cout << "Cholesky3x3(_RMLub)\n" << Cholesky3x3(_RMLub) << endl;
         cout << "_f_mob\n" << _f_mob << endl << "_f_sto\n" << _f_sto << endl;
     }
-    
+
 
 };
 
