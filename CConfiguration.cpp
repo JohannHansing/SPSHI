@@ -803,7 +803,8 @@ void CConfiguration::calcTracerMobilityMatrix(const bool& full){
 
 
 void CConfiguration::updateMobilityMatrix(){// ONLY for ranRod, since I dont have pbc.
-    const double asq = _polyrad * _polyrad;
+    const double asqPoly = _polyrad * _polyrad;
+    const double asqTracer = 0.5*(_polyrad * _polyrad + _pradius * _pradius);
     Matrix3d muij = Matrix3d::Zero();
     unsigned int i_count, j_count;
 
@@ -828,7 +829,7 @@ void CConfiguration::updateMobilityMatrix(){// ONLY for ranRod, since I dont hav
 
         // Tracer-polySphere RP
         vec_rij = _ppos - _polySpheres[i].pos;
-        muij = RotnePrager( vec_rij, asq );
+        muij = RotnePrager( vec_rij, asqTracer );
         _mobilityMatrix.block<3,3>(i_count,0) = muij;
         _mobilityMatrix.block<3,3>(0,i_count) = muij;
 
@@ -838,7 +839,7 @@ void CConfiguration::updateMobilityMatrix(){// ONLY for ranRod, since I dont hav
             vec_rij = _polySpheres[i].pos - _polySpheres[j].pos;
             j_count = 3 * (j + 1);    // plus 1 is necessary due to omitted tracer particle
 
-            muij = RPYamakawaPS(vec_rij, asq);
+            muij = RPYamakawaPS(vec_rij, asqPoly);
 
             // both lower and upper triangular of symmetric matrix need be filled
             _mobilityMatrix.block<3,3>(j_count,i_count) = muij;
