@@ -5,6 +5,8 @@ using namespace Eigen;
 
 using namespace std;
 
+
+
 const double _6root2 = 1.122462;
 const double _srqtPi = sqrt (M_PI);
 
@@ -22,6 +24,7 @@ CConfiguration::CConfiguration( double timestep, model_param_desc modelpar, sim_
     _pradius = modelpar.particlesize/2;   //_pradius is now the actual radius of the particle. hence, I need to change the definition of the LJ potential to include (_pradius +_polyrad)   -  or maybe leave LJ pot out
     _polyrad = modelpar.polymersize / 2;   //This is needed for testOverlap for steric and HI stuff !!
     _polydiamSq = pow(modelpar.polymersize,2);
+    _Invpolyrad = 1./_polyrad;
     _fitRPinv = triggers.fitRPinv;
     _boxsize = modelpar.boxsize;
     _n_cellsAlongb = modelpar.n_cells;
@@ -102,7 +105,7 @@ CConfiguration::CConfiguration( double timestep, model_param_desc modelpar, sim_
     _testcue = "";
     //TODO newrods -  Only create as many newrods as were deleted
     cout << "NOTE: Fixed number of rods in plane as 9*nrods!" << endl;
-    if (_ranRod) _testcue += "/fixnrods1";
+    if (_ranRod) _testcue += "/RPYOverlap/fixnrods1";
     if ( _noEwald ) _testcue += "/noEwald";
     if ( _EwaldTest > 0 ) _testcue += "/EwaldTest" + toString(_EwaldTest);
     if ( _n_cellsAlongb != 1 ){
@@ -264,8 +267,7 @@ int CConfiguration::checkBoxCrossing(){
             }
         }
     }
-    //TODO del
-    overlapreport();
+    ifdebug(overlapreport();)
     return 0;
 }
 
@@ -669,6 +671,7 @@ void CConfiguration::initPolySpheres(){
 void CConfiguration::initConstMobilityMatrix(){
     double rxi = 0.0, ryi = 0.0, rzi = 0.0;
     double rij = 0.0, rijsq = 0.0;
+    const double asq = _polyrad * _polyrad;
 
     // create mobility matrix - Some elements remain constant throughout the simulation. Those are stored here.
     _mobilityMatrix = MatrixXd::Identity( 3 * (_polySpheres.size() + 1) , 3 * (_polySpheres.size() + 1) );
@@ -686,7 +689,6 @@ void CConfiguration::initConstMobilityMatrix(){
     if (!_ranRod && !_noEwald) _mobilityMatrix.block<3,3>(0,0) = selfmob + Matrix3d::Identity() * self_plus; // ewaldCorr
 
     // now on diagonals for POLYMER SPHERES
-    const double asq = 2. * _polyrad * _polyrad;
     selfmob = realSpcSm( vec_rij, true, asq ) + reciprocalSpcSm( vec_rij, asq );
     // double self_plus = _pradius/_polyrad + _pradius / sqrt (M_PI) * ( - 6. * _alpha );  //TODO  alt
     self_plus = _pradius/_polyrad + _pradius / sqrt (M_PI) * ( - 6. * _alpha + 40. * pow(_alpha,3) * _polyrad * _polyrad / 3. );
@@ -717,7 +719,7 @@ void CConfiguration::initConstMobilityMatrix(){
         /*
          * Calculation of RP Ewald sum
          */
-            if (_ranRod) muij = RotnePrager(vec_rij, asq);
+            if (_ranRod) muij = RPYamakawaPS(vec_rij, asq);
             else if (_noEwald) muij = RotnePrager( minImage(vec_rij), asq );
             else muij = realSpcSm( vec_rij, false, asq ) + reciprocalSpcSm( vec_rij, asq );
 
@@ -732,7 +734,7 @@ void CConfiguration::initConstMobilityMatrix(){
 
 
 void CConfiguration::calcTracerMobilityMatrix(const bool& full){
-    const double asq = (_polyrad * _polyrad + _pradius * _pradius);
+    const double asq = 0.5*(_polyrad * _polyrad + _pradius * _pradius);
 
     // vector for outer product in muij
     Vector3d vec_rij;
@@ -745,12 +747,12 @@ void CConfiguration::calcTracerMobilityMatrix(const bool& full){
         vec_rij = _ppos - _polySpheres[j].pos;
         if (_noEwald) vec_rij = minImage(vec_rij);
         //vec_rij = minImage(vec_rij); // tmpminim
-        rij_sq = vec_rij.squaredNorm();
-        if (rij_sq <= (_stericrSq + 0.0001)){ // If there is overlap between particles, the distance is set to a very small value, according to Brady and Bossis in Phung1996
-            // set distance to 0.00000001 + _stericr but preserve direction
-            double corr = (0.0001 + sqrt(_stericrSq)) / sqrt(rij_sq);
-            vec_rij *= corr;
-        }
+        //rij_sq = vec_rij.squaredNorm();
+        // if (rij_sq <= (_stericrSq + 0.00001)){ // If there is overlap between particles, the distance is set to a very small value, according to Brady and Bossis in Phung1996
+        //     // set distance to 0.00000001 + _stericr but preserve direction
+        //     double corr = (0.00001 + sqrt(_stericrSq)) / sqrt(rij_sq);
+        //     vec_rij *= corr;
+        // }
 
         if (full){
             // Calculation of different particle width Rotne-Prager Ewald sum
@@ -801,7 +803,7 @@ void CConfiguration::calcTracerMobilityMatrix(const bool& full){
 
 
 void CConfiguration::updateMobilityMatrix(){// ONLY for ranRod, since I dont have pbc.
-    const double asq = 2.*_polyrad * _polyrad + 0.0001;//TODO del this should be without 0.000001
+    const double asq = _polyrad * _polyrad;
     Matrix3d muij = Matrix3d::Zero();
     unsigned int i_count, j_count;
 
@@ -836,7 +838,7 @@ void CConfiguration::updateMobilityMatrix(){// ONLY for ranRod, since I dont hav
             vec_rij = _polySpheres[i].pos - _polySpheres[j].pos;
             j_count = 3 * (j + 1);    // plus 1 is necessary due to omitted tracer particle
 
-            muij = RotnePrager(vec_rij, asq);
+            muij = RPYamakawaPS(vec_rij, asq);
 
             // both lower and upper triangular of symmetric matrix need be filled
             _mobilityMatrix.block<3,3>(j_count,i_count) = muij;
@@ -926,7 +928,7 @@ Matrix3d  CConfiguration::realSpcM(const double & rsq, const Vector3d & rij, con
     const double c2 = 4. * alphasq * alphasq * alphasq * rsq * rsq;
     const double c3 = alphasq * alphasq * rsq;
     const double c4 = 1./rsq;
-    const double c5 = asq/rsq;
+    const double c5 = asq*c4;
     const double expc = exp(-c1)/_srqtPi * alpha;
     const double erfcc = erfc(alpha * r) / r;
 
@@ -961,33 +963,34 @@ Matrix3d CConfiguration::RotnePrager(const Vector3d & rij, const double & asq) {
     const double r = sqrt(rsq);
     const double rInv = 1./r;
 
-    //TODO del
-    if (r<2*_polyrad){
+    ifdebug(if (r<2*_polyrad){
         cout << "Too small poly distance in RP!\nasq = "<< asq << "\nr = "<< r <<  endl;
         testIfSpheresAreOnRods();
-        overlapreport();
-    }
+        overlapreport();};)
 
-    const double c1 = asq * rInv * rInv;
+    const double c1 = 2. * asq * rInv * rInv;
     return _pradius * .75 * rInv  * ( ( 1. + 0.3333 * c1 ) * I + ( 1. - c1 ) * rij*rij.transpose() * rInv* rInv );
     // return _pradius * 3. / ( 4 * r ) * ( ( 1. + 2. * asq / (3. * rsq )) * I + ( 1. - 2.* asq / rsq ) * rij*rij.transpose() / rsq );
 }
 
 
-// Matrix3d CConfiguration::RotPragYamPolySphere(const Vector3d & rij, const double & asq) {
-//     // ONLY FOR SAME SIZE PARTICLES, i.e. polyspheres
-//     // source http://www.fuw.edu.pl/~piotrek/publications/different_sized.pdf.
-//     // overlap testing if activated..
-//     if (_r < ) {
-//         matrix<double> I = identity_matrix<double>(3);
-//         // overlap detected               //(1. - (9. / 32.) * _r / ( m_a));
-//         return 1. - 0.28125 * r/ *I + (0.09375/_r) * outer_prod(rij, rij);    //c1*I + (3./(32.*m_a*_r)) * outer_prod(_rij, _rij);
-//     }
-//     else {
-//         // no overlap
-//         return RotnePrager(_r, _rsq, _rij);
-//     }
-// }
+Matrix3d CConfiguration::RPYamakawaPS(const Vector3d & rij, const double asq) {
+    // ONLY FOR SAME SIZE PARTICLES, i.e. polyspheres
+    // source http://www.fuw.edu.pl/~piotrek/publications/different_sized.pdf.
+    // overlap testing if activated..
+    const double rSq = rij.squaredNorm();
+    if (rSq < _polydiamSq) {
+        const double r = sqrt(rSq);
+        Matrix3d  I = Matrix3d::Identity();
+        // overlap detected               //(1. - (9. / 32.) * _r / ( m_a));
+        // _pradius * _Invpolyrad  -- term is needed to arrive at self-diffusion of a polySphere
+        return _pradius * _Invpolyrad * ( I * (  1. - 0.28125 * r * _Invpolyrad  )  + 0.09375 * _Invpolyrad / r * rij*rij.transpose());    //c1*I + (3./(32.*m_a*_r)) * outer_prod(_rij, _rij);
+    }
+    else {
+        // no overlap
+        return RotnePrager(rij, asq);
+    }
+}
 
 //------------------------------------- Lubrication Resistance Matrix ------------------------------
 

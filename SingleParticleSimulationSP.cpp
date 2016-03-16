@@ -2,7 +2,7 @@
 #include "headers/SingleParticleSimulationSP.h"
 
 using namespace std;
-#define ifdebug(x)  x
+#define ifdebug(x)
 
 //ISSUES:
 //Size of int large enough for large numbers such as steps???
@@ -187,8 +187,6 @@ if (_triggers.ranRod && _modelpar.ustrength !=0){
         //if (l%100==0) cout << "run " << l << endl;
 
         for (int i = 0; i < _simpar.steps; i++){  //calculate stochastic force first, then mobility force!!
-            //TODO del
-            //
             ifdebug(if (i%50==0){cout << i;};)
             // calc HI mobility matrix here, since it needs to be defined for random force normalisation
 
@@ -212,10 +210,6 @@ if (_triggers.ranRod && _modelpar.ustrength !=0){
             if (((i+1)%_simpar.saveInt) == 0){       //saving Instant Values for each saveInt'th step!
                 energyU.addInstantValue(conf.getUpot(), instValIndex);
                 squareDisp.addInstantValue(conf.getPosVariance(), instValIndex);
-            //    displacem.addInstantValue(conf.getDisplacement(), instValIndex);
-            //    squareDisp_x.addInstantValue(conf.get1DPosVariance(0), instValIndex);
-            //    squareDisp_y.addInstantValue(conf.get1DPosVariance(1), instValIndex);
-            //    squareDisp_z.addInstantValue(conf.get1DPosVariance(2), instValIndex);
 
                 instValIndex += 1;
             }
@@ -248,7 +242,6 @@ if (_triggers.ranRod && _modelpar.ustrength !=0){
                 conf.moveBack();
                 conf.calcStochasticForces();
                 stepcheck = conf.makeStep();
-                //TODO del
                 ifdebug ((cout << "moveBack!");) //conf.moveBackReport();)
                 cnt++;
                 if (cnt==300){

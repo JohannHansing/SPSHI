@@ -25,6 +25,8 @@
 #include "parameter_structs.h"
 
 
+#define ifdebug(x)
+
 class CConfiguration {
     /*Class where all the configuration variables such as potRange etc. and also most functions for the
      * simulation are stored
@@ -92,6 +94,7 @@ private:
 	bool _HI;
 	double _polyrad;
     double _polydiamSq;
+    double _Invpolyrad;
 	int _edgeParticles;
     double _sphereoffset;
     double _lastcheck[3];
@@ -156,6 +159,7 @@ private:
 	Eigen::Matrix3d realSpcM(const double & rsq, const Eigen::Vector3d & rij, const double &asq);
 	Eigen::Matrix3d reciprocalSpcM(const double &ksq, const Eigen::Vector3d & kij,  const double &asq);
     Eigen::Matrix3d RotnePrager( const Eigen::Vector3d & rij, const double & asq);
+    Eigen::Matrix3d RPYamakawaPS(const Eigen::Vector3d & rij, const double asq);
 
 	Eigen::Matrix3d lub2p(const Eigen::Vector3d &rij, const double &rsq );
 	Eigen::Matrix3d lubricate( const Eigen::Vector3d & rij );
@@ -307,8 +311,7 @@ private:
     unsigned int avrods =0;
     unsigned int avcount =0;
 
-    //TODO del
-    int _itmp = 0;
+
 
 
     void copySphereRods(){
@@ -325,9 +328,7 @@ private:
         updateMobilityMatrix();
 
         //cout << "_polySpheres.size() = " << _polySpheres.size() << endl;
-        assert(_polySpheres.size() == _rodvec[0][0].spheres.size() * (_rodvec[0].size() + _rodvec[1].size() + _rodvec[2].size())    && "Error: number of polyspheres doesnt correspond to number of rods");
-        //TODO del
-        //saveXYZTraj(("tmptraj"+toString(_itmp++)+".xyz"), 0, "w");
+        ifdebug(if (_polySpheres.size() != _rodvec[0][0].spheres.size() * (_rodvec[0].size() + _rodvec[1].size() + _rodvec[2].size())){cout << "Error: number of polyspheres doesnt correspond to number of rods\n";};)
     }
 
 public:
@@ -380,15 +381,11 @@ public:
                     }
                     CRod newRod = CRod(axis, initVec, 3*_edgeParticles, _sphereoffset, _boxsize );
                     _rodvec[axis].push_back(newRod);
-                    //TODO del
-                    //cout <<"****\n" << newRod.coord << endl;
                 }
                 if (overlaps==true) break;//if there is still overlap after the 'i' for loop -- break out of axis loop, and do a retry.
             }
         }
         _N_rods = _rodvec[0].size() + _rodvec[1].size() + _rodvec[2].size();
-        //TODO del
-        //cout << "_N_rods = " << _N_rods << endl;
     }
 
     struct outOfRange{
@@ -403,9 +400,7 @@ public:
     void updateRodsVec(const int& crossaxis, const int& exitmarker){//exitmarker is -1 for negative direction, or 1 for positive
         //delete all polymers orthogonal to crossaxis, that are outside the box now
         //update other polymer positions
-        //TODO del
-        cout << "=======================\ncrossaxis and exitmarker: "<< crossaxis << " " << exitmarker << endl;
-        cout << "_N_rods = " << _N_rods << endl;
+        ifdebug(cout << "=======================\ncrossaxis and exitmarker: "<< crossaxis << " " << exitmarker << endl;  cout << "_N_rods = " << _N_rods << endl;)
         int ortho[2];
         ortho[0] = crossaxis + 1;
         if (ortho[0] == 3) ortho[0] = 0;
@@ -443,19 +438,12 @@ public:
             bool overlaps = true;
             plane = ortho[oa];
             int retry=0, sizeb4new = _rodvec[plane].size();
-            //TODO del
-            //cout << "----\nplane: " << plane << "\nN removed Rods = " << nrods - _rodvec[plane].size() << endl;
-            // erase the first 3 elements:
             while (overlaps==true){
-                //TODO del
-                //cout << "b4 newrods = " << newrods << "  --- _rodvec[plane].size() = " << _rodvec[plane].size() << endl;
                 _rodvec[plane].resize(sizeb4new);//resize vector, so that in case of retry, the newly created rods are deleted
-                //TODO del
-                //cout << "after _rodvec[plane].size() = " << _rodvec[plane].size() << endl;
                 ++retry;
-                //cout << "RETRY for ranRods update" << endl;
                 //for (int j=0;j<3*_n_tries;j++){// factor 3, since I reassign 3 cells per plane
                 //TODO newrods -  Only create as many newrods as were deleted
+                //TODO fixed rod number!!
                 for (int j=sizeb4new;j< (9*_n_rods);j++){
                     if (zerotoone() < _reln ){
                         for (int count=0; count < 200; count++){
@@ -478,27 +466,13 @@ public:
                             else break;
                         }
                         _rodvec[plane].push_back(  CRod( plane, tmpvec, 3*_edgeParticles, _sphereoffset, _boxsize )  );
-                        //TODO del
-                        // if (testRodTracerOverlap(tmpvec,plane) == true){
-                        //     cout << "Overlap between new rod and tracer" << endl;
-                        //     cout << "rodaxis = " << plane << " -- rodpos\n" << tmpvec << endl;
-                        // }
+                        ifdebug(if (testRodTracerOverlap(tmpvec,plane) == true){  cout << "Overlap between new rod and tracer \nrodaxis = " << plane << " -- rodpos\n" << tmpvec << endl; };)
                     }
                     // NO AXIS LOOP HERE! if (overlaps==true) break;//if there is still overlap after the 'i' for loop -- break out of axis loop, and do a retry.
                 }
             }
-            //TODO del
-            // for (int i=sizeb4new;i<_rodvec[plane].size();i++){
-            //     //cout <<"\nxxxxxx" <<  _rodvec[plane].at(i).coord << "\n---" << endl;
-            //     for (int s = 0; s < _rodvec[plane][i].spheres.size(); s++){
-            //         Eigen::Vector3d spos = _rodvec[plane][i].spheres[s].pos;
-            //         cout << "spherepos " << spos(0) << " "  << spos(1) << " " << spos(2) << endl;
-            //     }
-            // }
         }
         copySphereRods();
-        //TODO del
-        overlapreport();
 
         _N_rods = _rodvec[0].size() + _rodvec[1].size() + _rodvec[2].size();
         avrods += _N_rods;
@@ -525,16 +499,16 @@ public:
                 return true;
             }
         }
-        for (int l = 0; l < _rodvec[ortho1].size(); l++){
-            if (abs(testpos(ortho2) - _rodvec[ortho1].at(l).coord(ortho2)) < polydiam ){
-                return true;
-            }
-        }
-        for (int l = 0; l < _rodvec[ortho2].size(); l++){
-            if (abs(testpos(ortho1) - _rodvec[ortho2].at(l).coord(ortho1)) < polydiam ){
-                return true;
-            }
-        }
+        // for (int l = 0; l < _rodvec[ortho1].size(); l++){
+        //     if (abs(testpos(ortho2) - _rodvec[ortho1].at(l).coord(ortho2)) < polydiam ){
+        //         return true;
+        //     }
+        // }
+        // for (int l = 0; l < _rodvec[ortho2].size(); l++){
+        //     if (abs(testpos(ortho1) - _rodvec[ortho2].at(l).coord(ortho1)) < polydiam ){
+        //         return true;
+        //     }
+        // }
         return false;
     }
 
@@ -586,7 +560,7 @@ public:
     void overlapreport(){
         Eigen::Vector3d vrij;
         for (unsigned int j = 0; j < _polySpheres.size(); j++){
-            vrij = (_prevpos - _polySpheres[j].pos);
+            vrij = (_ppos - _polySpheres[j].pos);
             if (vrij.squaredNorm() <= _stericrSq ){
                 cout << vrij.norm() << " !!!!!!!!!!!!! OVErLAP!!  -- TRACER - POLYSPHERE\nsphereindex " << j << endl;
             }
@@ -601,7 +575,7 @@ public:
         }
         Eigen::Vector3d testpos;
         for (int axis=0;axis<3;axis++){
-            testpos = _prevpos;
+            testpos = _ppos;
             testpos(axis) = 0.;
             for (int l = 0; l < _rodvec[axis].size(); l++){
                 if ((testpos - _rodvec[axis][l].coord).squaredNorm() < _stericrSq + 0.000001){
