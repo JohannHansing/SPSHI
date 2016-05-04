@@ -26,6 +26,7 @@
 
 
 #define ifdebug(x)
+#define iftestEwald(x) x
 
 class CConfiguration {
     /*Class where all the configuration variables such as potRange etc. and also most functions for the
@@ -115,6 +116,8 @@ private:
 
 	//Lubrication parameters
 	int _mmax;
+	double _gX[3];
+	double _gY[3];
 	double _g[3];
     std::vector<double> _fXm;
     std::vector<double> _fYm;
@@ -225,12 +228,15 @@ public:
 
 private:
     void initLubStuff(double particlesize, double polymersize){
-        const double lam = _polyrad/_pradius;
+        const double lam = _polyrad/_pradius; //Jeffrey1984: lambda = a2/a1. Here, a1 is always the tracer
         const double c1 = pow(1+lam, -3);
 
-        _g[0] = 2 * pow(lam, 2) * c1;
-        _g[1] = lam/5 * ( 1 + 7*lam + lam*lam ) * c1;
-        _g[2] = 1/42 * ( 1 + lam*(18 - lam*(29 + lam*(18 + lam)))) * c1;
+        _gX[0] = 2 * pow(lam, 2) * c1;
+        _gX[1] = lam/5 * ( 1 + 7*lam + lam*lam ) * c1;
+        _gX[2] = 1/42 * ( 1 + lam*(18 - lam*(29 + lam*(18 + lam)))) * c1;
+
+        _gY[1] = 4./15 * lam * (2 + lam + 2*lam*lam) * c1;
+        _gY[2] = 2./375 * ( 16 - lam*(45 + lam*(58 - lam*(45 + lam*16)))) * c1;
 
         double lampow[11];
         for (int i=0;i<11;i++){
@@ -599,6 +605,40 @@ public:
         cout << "_prevpos: " << _prevpos(0) << ", " << _prevpos(1) << ", " << _prevpos(2) << endl;
         cout << "Cholesky3x3(_RMLub)\n" << Cholesky3x3(_RMLub) << endl;
         cout << "_f_mob\n" << _f_mob << endl << "_f_sto\n" << _f_sto << endl;
+    }
+
+
+
+
+    //TODO testEwald
+    void testEwald(){
+        // test Ewald summation for single monomer system
+        _noLub = true;
+        _EwaldTest=1;
+        _edgeParticles = _EwaldTest;
+        //---- Ewald summation --------
+        _n_cellsAlongb = 3;
+        _boxsize=10*_n_cellsAlongb;
+        _binv=1/_boxsize;
+        _Vinv = 1./pow( _boxsize, 3 );
+        initPolySpheres();
+        initConstMobilityMatrix();
+        calcTracerMobilityMatrix(true);
+        cout << "Ewald _tracerMM \n"<< _tracerMM << endl;
+        //----- No Ewald ----------
+        _noEwald = true;
+        _n_cellsAlongb = 7;
+        _boxsize=10*_n_cellsAlongb;
+        _binv=1/_boxsize;
+        _Vinv = 1./pow( _boxsize, 3 );
+        for (int i = 0; i < 3; i++){
+            _ppos(i) = _boxsize/2.;
+        }
+        initPolySpheres();
+        initConstMobilityMatrix();
+        calcTracerMobilityMatrix(true);
+        cout << "No Ewald _tracerMM \n"<< _tracerMM << endl;
+        abort();
     }
 
 
