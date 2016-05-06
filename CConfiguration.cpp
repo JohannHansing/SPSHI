@@ -29,6 +29,7 @@ CConfiguration::CConfiguration( double timestep, model_param_desc modelpar, sim_
     _boxsize = modelpar.boxsize;
     _n_cellsAlongb = modelpar.n_cells;
     _resetpos = (_boxsize/_n_cellsAlongb)/2; // puts the particle in the center of the cell at the origin
+    //_resetpos = (_boxsize)/2;
     _timestep = timestep;
     _rodDistance = modelpar.rodDist;
     _ranSpheres = triggers.ranSpheres;
@@ -46,7 +47,7 @@ CConfiguration::CConfiguration( double timestep, model_param_desc modelpar, sim_
     _hpi = triggers.hpi;
     _hpi_u = modelpar.hpi_u;
     _hpi_k = modelpar.hpi_k;
-    _binv = 2./_boxsize;
+    _binv = 2./_boxsize;//this needs to be 2/b apparently
     for (int i = 0; i < 3; i++){
         _ppos(i) = _resetpos;
         _startpos(i) = _resetpos;
@@ -104,7 +105,7 @@ CConfiguration::CConfiguration( double timestep, model_param_desc modelpar, sim_
     // TEST CUE to modify the directory the output data is written to!!
     _testcue = "";
     //TODO newrods -  Only create as many newrods as were deleted
-    cout << "NOTE: Fixed number of rods in plane as 9*nrods!" << endl;
+    if (_ranRod) cout << "NOTE: Fixed number of rods in plane as 9*nrods!" << endl;
     if (_ranRod) _testcue += "/RPYOverlap/fixnrods1";
     if ( _noEwald ) _testcue += "/noEwald";
     if ( _EwaldTest > 0 ) _testcue += "/EwaldTest" + toString(_EwaldTest);
@@ -731,16 +732,8 @@ void CConfiguration::initConstMobilityMatrix(){
             //cout << "----------------\n" << selfmob << endl;
         }
     }
+    initMreciprocalTracer();
 }
-
-
-// //TODO tmp
-// void HITester(){
-//     Eigen::Vector3d rij = Eigen::Vector3d::Zero();
-//     rij(0) = _pradius + _polyrad + 0.00001;
-//     Eigen::MatrixXd Mmob(6,6) = Eigen::MatrixXd::Identity(6);
-//     Mmob.block<3,3>(j_count,i_count) =
-// }
 
 
 void CConfiguration::calcTracerMobilityMatrix(const bool& full){
@@ -768,7 +761,9 @@ void CConfiguration::calcTracerMobilityMatrix(const bool& full){
             // Calculation of different particle width Rotne-Prager Ewald sum
             unsigned int j_count = 3 * (j + 1); //  plus 1 is necessary due to omitted tracer particle
             if (_ranRod || _noEwald) muij = RotnePrager( vec_rij, asq );
-            else muij = realSpcSm( vec_rij, false, asq ) + reciprocalSpcSm( vec_rij, asq );
+            // TODO Mreci Tracer
+            // else muij = realSpcSm( vec_rij, false, asq ) + reciprocalSpcSm( vec_rij, asq );
+            else muij = realSpcSm( vec_rij, false, asq ) + reciprocalSpcSmTracer( vec_rij );
 
             _mobilityMatrix.block<3,3>(j_count,0) = muij;
             _mobilityMatrix.block<3,3>(0,j_count) = muij;
@@ -780,14 +775,8 @@ void CConfiguration::calcTracerMobilityMatrix(const bool& full){
 
     // create resistance matrix - Some elements remain constant throughout the simulation. Those are stored here.
     if (full){
-        //TESTING
          _resMNoLub = ConjGradInvert(_mobilityMatrix);
          //_resMNoLub = CholInvertPart(_mobilityMatrix);
-         //Matrix3d diffmat = _resMNoLub - CholInvertPart(_mobilityMatrix);
-         //cout << "----\n" << diffmat << endl;
-         //if (_resMNoLub(2,0) < 0.0001 || _resMNoLub(2,0) < 0.0001  ){
-         //    cout << "$$$$$$$ _resMNoLub $$$$$$$$$\n" << _resMNoLub  << endl;
-         //}
     }
     // Add lubrication Part to tracer Resistance Matrix and invert
     _RMLub = _resMNoLub + lubM;
@@ -903,7 +892,45 @@ Matrix3d  CConfiguration::realSpcSm( const Vector3d & rij, const bool & self, co
     return Mreal;
 }
 
+void CConfiguration::initMreciprocalTracer(){
+    _Mreciprocal_arr.clear();
+    _kvec_arr.clear();
+    const double asq = 0.5*( _polyrad*_polyrad + _pradius*_pradius );
+    const double k_cutoffsq = pow(_k_cutoff, 2);
+    const int nkmax = _nkmax;
+    const double ntok = 2 * M_PI / _boxsize;
+    Vector3d kvec(3);
+    for (int n1 = -nkmax; n1 <= nkmax; n1++){
+        for (int n2 = -nkmax; n2 <= nkmax; n2++){
+            for (int n3 = -nkmax; n3 <= nkmax; n3++){
+                if (n1 == 0 && n2 == 0 && n3 == 0)  continue;
+                else{
+                    kvec(0) = n1 * ntok, kvec(1) = n2 * ntok, kvec(2) = n3 * ntok;
+                    const double ksq = kvec.squaredNorm();
+                    if ( ksq <= k_cutoffsq ){
+                        //TODO It seems like I could precalculate everything here, except the cos() term! Especially precalculating the reciprocalSpcM This will make the code much faster!
+                        _kvec_arr.push_back( kvec );
+                        _Mreciprocal_arr.push_back( reciprocalSpcM(ksq, kvec, asq) );
+                    }
+                }
+            }
+        }
+    }
+}
 
+Matrix3d  CConfiguration::reciprocalSpcSmTracer( const Vector3d & rij ){  // This should be distance of particles
+    const double k_cutoffsq = pow(_k_cutoff, 2);
+    const int nkmax = _nkmax;
+    const double ntok = 2 * M_PI / _boxsize;
+    Vector3d kvec(3);
+    Matrix3d  Mreciprocal = Matrix3d::Zero();
+    const int imax = _kvec_arr.size();
+    for (int i = 0; i < imax ; i++){
+        Mreciprocal += _Mreciprocal_arr[i] * cos((_kvec_arr[i].dot(rij)));
+    }
+    
+    return Mreciprocal * _Vinv;   
+}
 
 Matrix3d  CConfiguration::reciprocalSpcSm( const Vector3d & rij, const double& asq ){  // This should be distance of particles
     const double k_cutoffsq = pow(_k_cutoff, 2);
@@ -919,14 +946,14 @@ Matrix3d  CConfiguration::reciprocalSpcSm( const Vector3d & rij, const double& a
                     kvec(0) = n1 * ntok, kvec(1) = n2 * ntok, kvec(2) = n3 * ntok;
                     const double ksq = kvec.squaredNorm();
                     if ( ksq <= k_cutoffsq ){
-                        Mreciprocal += reciprocalSpcM(ksq, kvec, asq) * cos((kvec.transpose()* rij));
+                        //TODO It seems like I could precalculate everything here, except the cos() term! Especially precalculating the reciprocalSpcM This will make the code much faster!
+                        Mreciprocal += reciprocalSpcM(ksq, kvec, asq) * cos((kvec.dot(rij)));
                     }
                 }
             }
         }
     }
-
-    return Mreciprocal;   // V is taken care of in reciprocalSpcM
+    return Mreciprocal * _Vinv;   
 }
 
 Matrix3d  CConfiguration::realSpcM(const double & rsq, const Vector3d & rij, const double& asq) {
@@ -957,7 +984,7 @@ Matrix3d  CConfiguration::reciprocalSpcM(const double& ksq, const Vector3d & kij
     const double c1 = ksq / ( 4. * alphasq );
     const double ksqInv = 1./ksq;
 
-    return _pradius * ( 1. - 0.333333 * asq * ksq ) * ( 1. + c1 + 2. * c1 * c1 ) * ( 6. * M_PI * ksqInv * _Vinv) * exp( -c1 )
+    return _pradius * ( 1. - 0.333333 * asq * ksq ) * ( 1. + c1 + 2. * c1 * c1 ) * ( 6. * M_PI * ksqInv ) * exp( -c1 )
         * ( I - (kij*kij.transpose()) * ksqInv);
     // return _pradius * ( 1. - 0.333333 * asq * ksq ) * ( 1. + c1 + 2. * c1 * c1 ) * ( 6. * M_PI / (ksq * _V)) * exp( -c1 )
     //     * ( I - (kij*kij.transpose())/ksq);

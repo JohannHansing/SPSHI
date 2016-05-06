@@ -26,7 +26,7 @@
 
 
 #define ifdebug(x)
-#define iftestEwald(x) x
+#define iftestEwald(x) 
 
 class CConfiguration {
     /*Class where all the configuration variables such as potRange etc. and also most functions for the
@@ -113,7 +113,8 @@ private:
 	double _r_cutoffsq;
 	double _k_cutoff;
     bool _noEwald;
-
+    std::vector<Eigen::Vector3d> _kvec_arr;
+    std::vector<Eigen::Matrix3d> _Mreciprocal_arr;
 	//Lubrication parameters
 	int _mmax;
 	double _gX[3];
@@ -158,6 +159,8 @@ private:
     Eigen::Matrix3d Cholesky3x3(const Eigen::Matrix3d &mat);
     Eigen::Matrix3d invert3x3 (const Eigen::Matrix3d &A);
 	Eigen::Matrix3d realSpcSm( const Eigen::Vector3d & rij, const bool &self, const double &asq );
+        void initMreciprocalTracer();
+	Eigen::Matrix3d reciprocalSpcSmTracer( const Eigen::Vector3d & rij );
 	Eigen::Matrix3d reciprocalSpcSm( const Eigen::Vector3d & rij, const double &asq );
 	Eigen::Matrix3d realSpcM(const double & rsq, const Eigen::Vector3d & rij, const double &asq);
 	Eigen::Matrix3d reciprocalSpcM(const double &ksq, const Eigen::Vector3d & kij,  const double &asq);
@@ -224,6 +227,7 @@ public:
             abc[p]= minvec(p)*(_binv);
             minvec(p) -= abc[p] * _boxsize;
         }
+        return minvec;
     }
 
 private:
@@ -612,6 +616,7 @@ public:
 
     //TODO testEwald
     void testEwald(){
+        cout << "b4 _tracerMM \n"<< _tracerMM << endl;
         // test Ewald summation for single monomer system
         _noLub = true;
         _EwaldTest=1;
@@ -619,8 +624,9 @@ public:
         //---- Ewald summation --------
         _n_cellsAlongb = 3;
         _boxsize=10*_n_cellsAlongb;
-        _binv=1/_boxsize;
+        _binv=2/_boxsize;
         _Vinv = 1./pow( _boxsize, 3 );
+        _sphereoffset = (_boxsize/_n_cellsAlongb) / _edgeParticles;
         initPolySpheres();
         initConstMobilityMatrix();
         calcTracerMobilityMatrix(true);
@@ -629,12 +635,14 @@ public:
         _noEwald = true;
         _n_cellsAlongb = 7;
         _boxsize=10*_n_cellsAlongb;
-        _binv=1/_boxsize;
+        _binv=2/_boxsize;
         _Vinv = 1./pow( _boxsize, 3 );
+        _sphereoffset = (_boxsize/_n_cellsAlongb) / _edgeParticles;
         for (int i = 0; i < 3; i++){
             _ppos(i) = _boxsize/2.;
         }
         initPolySpheres();
+        cout << "Npolypsheres " <<_polySpheres.size() << endl;
         initConstMobilityMatrix();
         calcTracerMobilityMatrix(true);
         cout << "No Ewald _tracerMM \n"<< _tracerMM << endl;
