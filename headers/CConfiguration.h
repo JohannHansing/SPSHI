@@ -26,7 +26,8 @@
 
 
 #define ifdebug(x)
-#define iftestEwald(x) 
+#define iftestEwald(x)  
+#define iftestLub2p(x) 
 
 class CConfiguration {
     /*Class where all the configuration variables such as potRange etc. and also most functions for the
@@ -127,6 +128,8 @@ private:
     Eigen::Matrix<double, 6, 6> _RP2p;
     std::vector<double> _fitpIs;
     std::vector<double> _fitprrs;
+    std::array<double, 20> _minv;
+    std::array<double, 20> _m2inv;
 
 
     boost::mt19937 *m_igen;                      //generate instance of random number generator "twister".
@@ -234,18 +237,22 @@ private:
     void initLubStuff(double particlesize, double polymersize){
         const double lam = _polyrad/_pradius; //Jeffrey1984: lambda = a2/a1. Here, a1 is always the tracer
         const double c1 = pow(1+lam, -3);
-
-        _gX[0] = 2 * pow(lam, 2) * c1;
-        _gX[1] = lam/5 * ( 1 + 7*lam + lam*lam ) * c1;
-        _gX[2] = 1/42 * ( 1 + lam*(18 - lam*(29 + lam*(18 + lam)))) * c1;
-
-        _gY[1] = 4./15 * lam * (2 + lam + 2*lam*lam) * c1;
-        _gY[2] = 2./375 * ( 16 - lam*(45 + lam*(58 - lam*(45 + lam*16)))) * c1;
-
+        
         double lampow[11];
         for (int i=0;i<11;i++){
             lampow[i] = pow(lam,i);
         }
+
+        _gX[0] = 2 * pow(lam, 2) * c1;
+        _gX[1] = lam/5 * ( 1 + 7*lam + lam*lam ) * c1;
+        _gX[2] = 1./42 * ( 1 + lam*18 - lampow[2]*29 + lampow[3]*18 + lampow[4]) * c1;
+
+        _gY[1] = 4./15 * lam * (2 + lam + 2*lam*lam) * c1;
+        _gY[2] = 2./375 * ( 16 - lam*45 + lampow[2]*58 - lampow[3]*45 + lampow[4]*16) * c1;
+        
+//         for (int i=0;i<3;i++){
+//             cout << _gX[i] << "  --  " << _gY[i] << endl;
+//         }
 
         double f0 = 1;
         double f1 = 3*lam;
@@ -264,18 +271,18 @@ private:
         _fXm.insert(_fXm.end(), &tmpArrX[0], &tmpArrX[ArrSize]);
 
         double fy0 = 1;
-        double fy2 = 9/4*lam;
-        double fy4 = 6*lam+81/16*lampow[2]+ 18*lampow[3];
-        double fy6 = 4*lam + 54*lampow[2]+ 1241/64 *lampow[3 ]+ 81*lampow[4] + 72*lampow[5];
-        double fy8 = 279*lampow[2] + 4261/8*lampow[3] + 126369/256*lampow[4] - 117/8*lampow[5] + 648*lampow[6] + 288*lampow[7];
-        double fy10 = 1152*lampow[2] +7857/4*lampow[3] +98487/16*lampow[4] + 10548393/1024*lampow[5] +67617/8*lampow[6] - 351/2*lampow[7 ]+ 3888*lampow[8] + 1152*lampow[9];
+        double fy2 = 9./4*lam;
+        double fy4 = 6*lam+81./16*lampow[2]+ 18*lampow[3];
+        double fy6 = 4*lam + 54*lampow[2]+ 1241./64 *lampow[3 ]+ 81*lampow[4] + 72*lampow[5];
+        double fy8 = 279*lampow[2] + 4261./8*lampow[3] + 126369./256*lampow[4] - 117./8*lampow[5] + 648*lampow[6] + 288*lampow[7];
+        double fy10 = 1152*lampow[2] +7857./4*lampow[3] +98487./16*lampow[4] + 10548393./1024*lampow[5] +67617./8*lampow[6] - 351./2*lampow[7 ]+ 3888*lampow[8] + 1152*lampow[9];
         const double tmpArrY[] =  {fy0,fy2,fy4,fy6,fy8,fy10};
         _fYm.insert(_fYm.end(), &tmpArrY[0], &tmpArrY[ArrSize]);
         for (int i=0; i<ArrSize; i++){
+             //cout << "fYm[i] =" << _fYm[i] << endl;
+             //cout << "fXm[i] =" << _fXm[i] << endl;
             _fYm[i] /= pow(2*(1+lam),2*i);
             _fXm[i] /= pow(2*(1+lam),2*i);
-            // cout << "fYm[i] =" << _fYm[i] << endl;
-            // cout << "fXm[i] =" << _fXm[i] << endl;
         }
 
 
@@ -297,6 +304,15 @@ private:
             _fitpIs.push_back(fitpI);
             _fitprrs.push_back(fitprr);
         }
+        
+        //m sum precalculations
+        _minv[0] = 0; //zero, since this should not be used in any case
+        _m2inv[0] = 0;
+        for (int m = 1; m < 20; m++){
+            _minv[m] = 1./m;
+            _m2inv[m] =  1./(m*(m-1));
+        }
+        _m2inv[1]=-1; //IMPORTANT distinction, due to m_1! Check Jeffrey1984 if unclear
     }
 
     // ************ RANROD ************
@@ -612,7 +628,7 @@ public:
     }
 
 
-
+    void testLub2p();
 
     //TODO testEwald
     void testEwald(){
@@ -622,7 +638,7 @@ public:
         _EwaldTest=1;
         _edgeParticles = _EwaldTest;
         //---- Ewald summation --------
-        _n_cellsAlongb = 3;
+        _n_cellsAlongb = 7;
         _boxsize=10*_n_cellsAlongb;
         _binv=2/_boxsize;
         _Vinv = 1./pow( _boxsize, 3 );
@@ -642,10 +658,36 @@ public:
             _ppos(i) = _boxsize/2.;
         }
         initPolySpheres();
-        cout << "Npolypsheres " <<_polySpheres.size() << endl;
         initConstMobilityMatrix();
         calcTracerMobilityMatrix(true);
         cout << "No Ewald _tracerMM \n"<< _tracerMM << endl;
+        
+        //============================================
+        // -------------- Normal System ---------------
+        //============================================
+        _noEwald = false;
+        _EwaldTest=0;
+        _edgeParticles = (int) ( ( _boxsize/_n_cellsAlongb )/(2*_polyrad) + 0.0001);// round down
+        //---- Ewald summation --------
+        _n_cellsAlongb = 1;
+        _boxsize=10*_n_cellsAlongb;
+        _binv=2/_boxsize;
+        _Vinv = 1./pow( _boxsize, 3 );
+        _sphereoffset = (_boxsize/_n_cellsAlongb) / _edgeParticles;
+        _ppos = Eigen::Vector3d(_boxsize/2.,_boxsize/2.,_boxsize/2.);
+        initPolySpheres();
+        initConstMobilityMatrix();
+        calcTracerMobilityMatrix(true);
+        cout << "Normal System Ewald _tracerMM \n"<< _tracerMM << endl;
+        //----- No Ewald ----------
+        _noEwald = true;
+        for (int i = 0; i < 3; i++){
+            _ppos(i) = _boxsize/2.;
+        }
+        initPolySpheres();
+        initConstMobilityMatrix();
+        calcTracerMobilityMatrix(true);
+        cout << "Normal System No Ewald _tracerMM \n"<< _tracerMM << endl;
         abort();
     }
 

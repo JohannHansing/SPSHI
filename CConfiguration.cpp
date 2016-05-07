@@ -123,6 +123,7 @@ CConfiguration::CConfiguration( double timestep, model_param_desc modelpar, sim_
  //        cout << rn_vec(0) << "    \n" << lub2p(rn_vec, rn_vec.squaredNorm(), 8) <<"\n -----" << endl ;
  //    }
     iftestEwald(testEwald();)
+    iftestLub2p(testLub2p();)
 
 }
 
@@ -1078,68 +1079,112 @@ Matrix3d  CConfiguration::lubricate( const Vector3d & rij ){
     return lubPart;
 }
 
+
+
+void CConfiguration::testLub2p(){
+    Vector3d rij(_polyrad+_pradius,0,0.1);
+    double rsq = rij.squaredNorm();
+    
+    const unsigned int mmax = _fXm.size();
+    const unsigned int logmax = 9;// this needs to be less than 20. Else, _minv initialization needs to be adjusted.
+
+    const double sSq = 4.*rsq/pow(_pradius + _polyrad,2.);
+    const Matrix3d rrT = rij * rij.transpose() / rsq;
+    const Matrix3d I = Matrix3d::Identity();
+    cout << "\ns " << sqrt(sSq) << endl;
+    const double sinvSq = 1./sSq;
+    const double c1 = 4.*sinvSq;//= pow(2/s,2)
+    double c1pows[logmax];
+    c1pows[0] = 1;
+    for (int m = 1; m < logmax; m++){
+        c1pows[m] = c1 * c1pows[m-1];
+    }
+    const double c2 = (1-c1);
+    double c3 = 0;//this needs to be zero, if s>3 and log not computed
+    double SumX = 0;
+    double SumY = 0;
+    //TODO BIG QUESTION; Since the sum is infinite it should actually completely vanish in combination with the log terms. As julian about this!   
+    if (sSq<9.){
+        c3 = log(c2);
+        for (int m = 1; m < logmax; m++){
+            SumX += ( - _minv[m] * _gX[1] + _m2inv[m] * _gX[2] ) * c1pows[m];
+            //SumX += (_fXm[m] - _gX[0] - 1./m * _gX[1] + 1./(m*(m-1)) * _gX[2] ) * c1pows[m];
+            
+            SumY += ( - _minv[m] * _gY[1] +  _m2inv[m] * _gY[2] ) * c1pows[m];
+        }
+    }
+    for (int m = 1; m < mmax; m++){
+        //TODO precalc 1/m and 1/(m*(m-1)) and put into table, it's always the same at each iteration here and below in SumY
+        SumX += (_fXm[m] - _gX[0] ) * c1pows[m];
+        
+        SumY += (_fYm[m] ) * c1pows[m];
+    }
+    
+    for (int m = 1; m < mmax; m++){
+        //TODO precalc 1/m and 1/(m*(m-1)) and put into table, it's always the same at each iteration here and below in SumY
+        cout << ", " << _fYm[m];
+    }
+    cout << endl;
+    for (int m = 1; m < mmax; m++){
+        //TODO precalc 1/m and 1/(m*(m-1)) and put into table, it's always the same at each iteration here and below in SumY
+        cout << ", " << _fXm[m];
+    }
+    
+    double X = _gX[0]/(c2)  -  _gX[1]*c3  -  _gX[2]*(c2)*c3  +  1.  -  _gX[0] + SumX;
+    
+    double Y = -_gY[1]*c3 - _gY[2]*(c2)*c3  +  1.  + SumY;
+    
+    cout << "X = "<< X << "\nY = " << Y<< endl;
+    abort();
+    
+}
+
 Matrix3d CConfiguration::lub2p(const Vector3d &rij, const double &rsq){
     // This function returns the 3x3 SELF-lubrication part of the resistance matrix of the tracer particle, i.e. A_{11} in Jeffrey1984
     const unsigned int mmax = _fXm.size();
+    const unsigned int logmax = 9;// this needs to be less than 20. Else, _minv initialization needs to be adjusted.
 
-    const double s = 2*sqrt(rsq)/(_pradius + _polyrad);
+    const double sSq = 4*rsq/pow(_pradius + _polyrad,2.);
     const Matrix3d rrT = rij * rij.transpose() / rsq;
     const Matrix3d I = Matrix3d::Identity();
-    // cout << "\ns " << s << endl;
-    const double sinv = 1./s;
-    // const double c1 = 4.*sinv*sinv;//= pow(2/s,2)
-    // const double c2 = (1-c1);
-    // const double c3 = log(c2);
-    // double SumX = 0;
-    // TODO np.sum(
-    //     [(2**(-m) * (1+lam)**(-m) *_fXm[int(m/2+0.0001)] - _gX[0] - 2/m*_gX[1] + 4/m /h(m) * _gX[2])*(2/s)**m for m in range(2,2*mmax,2)])
-    // double SumY = 0;
-    // TODO np.sum(
-    //     [(2**(-m) * (1+lam)**(-m) *_fYm[int(m/2+0.0001)] - 2/m*_gY[1] + 4/m /h(m) * _gY[2])*(2/s)**m for m in range(2,2*mmax,2)])
-    //
-    //
-    // double X = _gX[0]/(c2)  -  _gX[1]*c3  -  _gX[2]*(c2)*c3  +  1.  -  _gX[0] + SumX;
-    //
-    // double Y = -_gY[1]*c3 - _gY[2]*(c2)*c3  +  1.  + SumY;
-    //
-    // ------------------
-
-    const double c1 = 4.*sinv*sinv;//= pow(2/s,2)
-    double c1pows[mmax];
+//     cout << "\ns " << sqrt(sSq) << endl;
+    const double sinvSq = 1./sSq;
+    const double sinv = sqrt(sinvSq);
+    const double c1 = 4.*sinvSq;//= pow(2/s,2)
+    double c1pows[logmax];
     c1pows[0] = 1;
-    for (int m = 1; m < mmax; m++){
+    for (int m = 1; m < logmax; m++){
         c1pows[m] = c1 * c1pows[m-1];
     }
-    // cout << "c1 " << c1 << endl;
-    double Sum1 = 0;
-    double Sum2 = c1;
-
-    double c3 = 0;
-    // cout << "Sum1: " << Sum1 << " $$$$ Sum2: " << Sum2 << endl;
-    if (s<3) {
-        Sum1 = - c1 * ( _g[2] + _g[1] );
-        for (int m = 2; m < mmax; m++){
-            Sum1 += c1pows[m]/(m*(m-1)) * ( _g[2] - (m-1)*_g[1]);
+    const double c2 = (1-c1);
+    double c3 = 0;//this needs to be zero, if s>3 and log not computed
+    double SumX = 0;
+    double SumY = 0;
+    //TODO BIG QUESTION; Since the sum is infinite it should actually completely vanish in combination with the log terms. As julian about this!   
+    if (sSq<9.){
+        c3 = log(c2);
+        for (int m = 1; m < logmax; m++){
+            SumX += ( - _minv[m] * _gX[1] + _m2inv[m] * _gX[2] ) * c1pows[m];
+            //SumX += (_fXm[m] - _gX[0] - 1./m * _gX[1] + 1./(m*(m-1)) * _gX[2] ) * c1pows[m];
+            
+            SumY += ( - _minv[m] * _gY[1] +  _m2inv[m] * _gY[2] ) * c1pows[m];
         }
-        c3 = - ( _g[1] + _g[2] * ( 1 - c1 ) ) * log( 1 - c1 );
     }
-    for (int m = 2; m < mmax; m++){
-        //Sum1 += c1pows[m]/m * ( _g[2]/(m-1) - _g[1]);
-        Sum2 += c1pows[m];
+    for (int m = 1; m < mmax; m++){
+        //TODO precalc 1/m and 1/(m*(m-1)) and put into table, it's always the same at each iteration here and below in SumY
+        SumX += (_fXm[m] - _gX[0] ) * c1pows[m];
+        
+        SumY += (_fYm[m] ) * c1pows[m];
     }
-    Sum2 = Sum2 * _g[0];
-    // cout << "Sum1: " << Sum1 << " $$$$ Sum2: " << Sum2 << endl;
-    //const double c3 = - ( _g[1] + _g[2] * ( 1 - c1 ) ) * log( 1 - c1 );
-    const double c4 = ( _g[0]/(1-c1) - _g[0] +  2*c3  +  2*Sum1  +  Sum2 ) ;
-
-    // Long-Range part added 07.01.2016
-    double Sum3 = 0, Sum4 = 0;
-    for (int m = 0; m < mmax; m++){
-        Sum3 += c1pows[m] * _fYm[m];
-        Sum4 += c1pows[m] * _fXm[m];
-    }
+    
+    double X = _gX[0]/(c2)  -  _gX[1]*c3  -  _gX[2]*(c2)*c3  +  1.  -  _gX[0] + SumX;
+    
+    double Y = -_gY[1]*c3 - _gY[2]*(c2)*c3  +  1.  + SumY;
+    
     // End Long-Range part
-    const Matrix3d lubR = I * (c3 + Sum1 + Sum3) + rrT * ( c4 + Sum4 - Sum3 );
+    const Matrix3d lubR = (X - Y) * rrT + Y * I;
+    //
+    // ------------------ OLD ----------------------    
 
 
     //Here, i am subtracting the 2paricle RP part
@@ -1148,7 +1193,8 @@ Matrix3d CConfiguration::lub2p(const Vector3d &rij, const double &rsq){
     if (_fitRPinv){
         double c5 = sinv;
         double pI = _fitpIs[0]; double prr = _fitprrs[0];
-        for (int m = 1; m < _fitpIs.size(); m++){
+        int end = _fitpIs.size();
+        for (int m = 1; m < end; m++){
             pI += _fitpIs[m] * c5;
             prr += _fitprrs[m] * c5;
             c5 *= sinv;
