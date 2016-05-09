@@ -122,7 +122,7 @@ CConfiguration::CConfiguration( double timestep, model_param_desc modelpar, sim_
  //        rn_vec(0) = 3 + 0.001 * l;
  //        cout << rn_vec(0) << "    \n" << lub2p(rn_vec, rn_vec.squaredNorm(), 8) <<"\n -----" << endl ;
  //    }
-    iftestEwald(testEwald();)
+    iftestEwald(testRealSpcM(); testEwald(); )
     iftestLub2p(testLub2p();)
 
 }
@@ -155,7 +155,7 @@ void CConfiguration::checkDisplacementforMM(){
 Vector3d CConfiguration::midpointScheme(const Vector3d & V0dt, const Vector3d & F){
     // Implementation of midpoint scheme according to Banchio2003
     Vector3d ppos_prime;
-    const double n = 100;
+    const double n = 500;
     ppos_prime = _ppos + V0dt / n;
 
     Vector3d vec_rij;
@@ -970,6 +970,10 @@ Matrix3d  CConfiguration::realSpcM(const double & rsq, const Vector3d & rij, con
     const double c5 = asq*c4;
     const double expc = exp(-c1)/_srqtPi * alpha;
     const double erfcc = erfc(alpha * r) / r;
+    
+    //TODO del 
+    cout << _pradius * ( erfcc *  ( 0.75 + 0.5 * c5 ) + expc * (3. * c1 - 4.5 + asq * ( c2 - 20. * c3 + 14. * alphasq + c4 ))) << endl;
+    cout << _pradius * c4 * rsq * ( erfcc * ( 0.75 - 1.5 * c5 ) + expc * ( 1.5 - 3. * c1 + asq * (- c2 + 16. * c3 - 2. * alphasq - 3. * c4))) << endl;
 
     return _pradius * ( I * ( erfcc *  ( 0.75 + 0.5 * c5 )
         + expc * (3. * c1 - 4.5 + asq * ( c2 - 20. * c3 + 14. * alphasq + c4 )))
@@ -1209,75 +1213,6 @@ Matrix3d CConfiguration::lub2p(const Vector3d &rij, const double &rsq){
 
     return lubR - RPinv;
 }
-
-// Matrix3d CConfiguration::lub2p(const Vector3d &rij, const double &rsq){
-//     // This function returns the 3x3 SELF-lubrication part of the resistance matrix of the tracer particle, i.e. A_{11} in Jeffrey1984
-//     const unsigned int mmax = _fXm.size();
-//
-//     const double s = 2*sqrt(rsq)/(_pradius + _polyrad);
-//     const Matrix3d rrT = rij * rij.transpose() / rsq;
-//     const Matrix3d I = Matrix3d::Identity();
-//     // cout << "\ns " << s << endl;
-//     const double sinv = 1./s;
-//     const double c1 = 4.*sinv*sinv;//= pow(2/s,2)
-//     double c1pows[mmax];
-//     c1pows[0] = 1;
-//     for (int m = 1; m < mmax; m++){
-//         c1pows[m] = c1 * c1pows[m-1];
-//     }
-//     // cout << "c1 " << c1 << endl;
-//     double Sum1 = 0;
-//     double Sum2 = c1;
-//
-//     double c3 = 0;
-//     // cout << "Sum1: " << Sum1 << " $$$$ Sum2: " << Sum2 << endl;
-//     if (s<3) {
-//         Sum1 = - c1 * ( _g[2] + _g[1] );
-//         for (int m = 2; m < mmax; m++){
-//             Sum1 += c1pows[m]/(m*(m-1)) * ( _g[2] - (m-1)*_g[1]);
-//         }
-//         c3 = - ( _g[1] + _g[2] * ( 1 - c1 ) ) * log( 1 - c1 );
-//     }
-//     for (int m = 2; m < mmax; m++){
-//         //Sum1 += c1pows[m]/m * ( _g[2]/(m-1) - _g[1]);
-//         Sum2 += c1pows[m];
-//     }
-//     Sum2 = Sum2 * _g[0];
-//     // cout << "Sum1: " << Sum1 << " $$$$ Sum2: " << Sum2 << endl;
-//     //const double c3 = - ( _g[1] + _g[2] * ( 1 - c1 ) ) * log( 1 - c1 );
-//     const double c4 = ( _g[0]/(1-c1) - _g[0] +  2*c3  +  2*Sum1  +  Sum2 ) ;
-//
-//     // Long-Range part added 07.01.2016
-//     double Sum3 = 0, Sum4 = 0;
-//     for (int m = 0; m < mmax; m++){
-//         Sum3 += c1pows[m] * _fYm[m];
-//         Sum4 += c1pows[m] * _fXm[m];
-//     }
-//     // End Long-Range part
-//     const Matrix3d lubR = I * (c3 + Sum1 + Sum3) + rrT * ( c4 + Sum4 - Sum3 );
-//
-//
-//     //Here, i am subtracting the 2paricle RP part
-//     Matrix3d RPinv;
-//     // invRP fit function. Calculate fit Polymer
-//     if (_fitRPinv){
-//         double c5 = sinv;
-//         double pI = _fitpIs[0]; double prr = _fitprrs[0];
-//         for (int m = 1; m < _fitpIs.size(); m++){
-//             pI += _fitpIs[m] * c5;
-//             prr += _fitprrs[m] * c5;
-//             c5 *= sinv;
-//         }
-//         RPinv = I * pI + rrT * prr;
-//     }
-//     else {  // Matrix inversion
-//         _RP2p.block<3,3>(0,3) = RotnePrager(rij, (_polyrad * _polyrad + _pradius * _pradius)/2 );
-//         _RP2p.block<3,3>(3,0) = _RP2p.block<3,3>(0,3);
-//         RPinv = CholInvertPart( _RP2p );
-//     }
-//
-//     return lubR - RPinv;
-// }
 
 
 Matrix3d CConfiguration::ConjGradInvert(const MatrixXd &A){

@@ -690,6 +690,18 @@ public:
         cout << "Normal System No Ewald _tracerMM \n"<< _tracerMM << endl;
         abort();
     }
+    
+    void testRealSpcM(){
+        cout <<"\n==========\n" << endl;
+        double asq = (_pradius*_pradius+_polyrad*_polyrad)/2;
+        Eigen::Vector3d rij(0,0,(_polyrad + _pradius)+1);
+        double rsq = rij.squaredNorm();
+        cout << "rsq " << rsq << " - rij " << rij << " - asq " << asq << endl;
+        cout << "Mreal " <<realSpcM( rsq, rij, asq);
+        
+        cout <<"\n==========\n" << endl;
+        abort();
+    }
 
 
 };
