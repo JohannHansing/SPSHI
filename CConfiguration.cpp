@@ -929,8 +929,8 @@ Matrix3d  CConfiguration::reciprocalSpcSmTracer( const Vector3d & rij ){  // Thi
     for (int i = 0; i < imax ; i++){
         Mreciprocal += _Mreciprocal_arr[i] * cos((_kvec_arr[i].dot(rij)));
     }
-    
-    return Mreciprocal * _Vinv;   
+
+    return Mreciprocal * _Vinv;
 }
 
 Matrix3d  CConfiguration::reciprocalSpcSm( const Vector3d & rij, const double& asq ){  // This should be distance of particles
@@ -954,7 +954,7 @@ Matrix3d  CConfiguration::reciprocalSpcSm( const Vector3d & rij, const double& a
             }
         }
     }
-    return Mreciprocal * _Vinv;   
+    return Mreciprocal * _Vinv;
 }
 
 Matrix3d  CConfiguration::realSpcM(const double & rsq, const Vector3d & rij, const double& asq) {
@@ -971,9 +971,6 @@ Matrix3d  CConfiguration::realSpcM(const double & rsq, const Vector3d & rij, con
     const double expc = exp(-c1)/_srqtPi * alpha;
     const double erfcc = erfc(alpha * r) / r;
     
-    //TODO del 
-    cout << _pradius * ( erfcc *  ( 0.75 + 0.5 * c5 ) + expc * (3. * c1 - 4.5 + asq * ( c2 - 20. * c3 + 14. * alphasq + c4 ))) << endl;
-    cout << _pradius * c4 * rsq * ( erfcc * ( 0.75 - 1.5 * c5 ) + expc * ( 1.5 - 3. * c1 + asq * (- c2 + 16. * c3 - 2. * alphasq - 3. * c4))) << endl;
 
     return _pradius * ( I * ( erfcc *  ( 0.75 + 0.5 * c5 )
         + expc * (3. * c1 - 4.5 + asq * ( c2 - 20. * c3 + 14. * alphasq + c4 )))
@@ -1088,7 +1085,7 @@ Matrix3d  CConfiguration::lubricate( const Vector3d & rij ){
 void CConfiguration::testLub2p(){
     Vector3d rij(_polyrad+_pradius,0,0.1);
     double rsq = rij.squaredNorm();
-    
+
     const unsigned int mmax = _fXm.size();
     const unsigned int logmax = 9;// this needs to be less than 20. Else, _minv initialization needs to be adjusted.
 
@@ -1107,23 +1104,23 @@ void CConfiguration::testLub2p(){
     double c3 = 0;//this needs to be zero, if s>3 and log not computed
     double SumX = 0;
     double SumY = 0;
-    //TODO BIG QUESTION; Since the sum is infinite it should actually completely vanish in combination with the log terms. As julian about this!   
+    //TODO BIG QUESTION; Since the sum is infinite it should actually completely vanish in combination with the log terms. As julian about this!
     if (sSq<9.){
         c3 = log(c2);
         for (int m = 1; m < logmax; m++){
             SumX += ( - _minv[m] * _gX[1] + _m2inv[m] * _gX[2] ) * c1pows[m];
             //SumX += (_fXm[m] - _gX[0] - 1./m * _gX[1] + 1./(m*(m-1)) * _gX[2] ) * c1pows[m];
-            
+
             SumY += ( - _minv[m] * _gY[1] +  _m2inv[m] * _gY[2] ) * c1pows[m];
         }
     }
     for (int m = 1; m < mmax; m++){
         //TODO precalc 1/m and 1/(m*(m-1)) and put into table, it's always the same at each iteration here and below in SumY
         SumX += (_fXm[m] - _gX[0] ) * c1pows[m];
-        
+
         SumY += (_fYm[m] ) * c1pows[m];
     }
-    
+
     for (int m = 1; m < mmax; m++){
         //TODO precalc 1/m and 1/(m*(m-1)) and put into table, it's always the same at each iteration here and below in SumY
         cout << ", " << _fYm[m];
@@ -1133,14 +1130,14 @@ void CConfiguration::testLub2p(){
         //TODO precalc 1/m and 1/(m*(m-1)) and put into table, it's always the same at each iteration here and below in SumY
         cout << ", " << _fXm[m];
     }
-    
+
     double X = _gX[0]/(c2)  -  _gX[1]*c3  -  _gX[2]*(c2)*c3  +  1.  -  _gX[0] + SumX;
-    
+
     double Y = -_gY[1]*c3 - _gY[2]*(c2)*c3  +  1.  + SumY;
-    
+
     cout << "X = "<< X << "\nY = " << Y<< endl;
     abort();
-    
+
 }
 
 Matrix3d CConfiguration::lub2p(const Vector3d &rij, const double &rsq){
@@ -1164,31 +1161,31 @@ Matrix3d CConfiguration::lub2p(const Vector3d &rij, const double &rsq){
     double c3 = 0;//this needs to be zero, if s>3 and log not computed
     double SumX = 0;
     double SumY = 0;
-    //TODO BIG QUESTION; Since the sum is infinite it should actually completely vanish in combination with the log terms. As julian about this!   
+    //TODO BIG QUESTION; Since the sum is infinite it should actually completely vanish in combination with the log terms. As julian about this!
     if (sSq<9.){
         c3 = log(c2);
         for (int m = 1; m < logmax; m++){
             SumX += ( - _minv[m] * _gX[1] + _m2inv[m] * _gX[2] ) * c1pows[m];
             //SumX += (_fXm[m] - _gX[0] - 1./m * _gX[1] + 1./(m*(m-1)) * _gX[2] ) * c1pows[m];
-            
+
             SumY += ( - _minv[m] * _gY[1] +  _m2inv[m] * _gY[2] ) * c1pows[m];
         }
     }
     for (int m = 1; m < mmax; m++){
         //TODO precalc 1/m and 1/(m*(m-1)) and put into table, it's always the same at each iteration here and below in SumY
         SumX += (_fXm[m] - _gX[0] ) * c1pows[m];
-        
+
         SumY += (_fYm[m] ) * c1pows[m];
     }
-    
+
     double X = _gX[0]/(c2)  -  _gX[1]*c3  -  _gX[2]*(c2)*c3  +  1.  -  _gX[0] + SumX;
-    
+
     double Y = -_gY[1]*c3 - _gY[2]*(c2)*c3  +  1.  + SumY;
-    
+
     // End Long-Range part
     const Matrix3d lubR = (X - Y) * rrT + Y * I;
     //
-    // ------------------ OLD ----------------------    
+    // ------------------ OLD ----------------------
 
 
     //Here, i am subtracting the 2paricle RP part
