@@ -1087,17 +1087,16 @@ void CConfiguration::testLub2p(){
     double rsq = rij.squaredNorm();
 
     const unsigned int mmax = _fXm.size();
-    const unsigned int logmax = 9;// this needs to be less than 20. Else, _minv initialization needs to be adjusted.
-
+    
     const double sSq = 4.*rsq/pow(_pradius + _polyrad,2.);
     const Matrix3d rrT = rij * rij.transpose() / rsq;
     const Matrix3d I = Matrix3d::Identity();
     cout << "\ns " << sqrt(sSq) << endl;
     const double sinvSq = 1./sSq;
     const double c1 = 4.*sinvSq;//= pow(2/s,2)
-    double c1pows[logmax];
+    double c1pows[mmax];
     c1pows[0] = 1;
-    for (int m = 1; m < logmax; m++){
+    for (int m = 1; m < mmax; m++){
         c1pows[m] = c1 * c1pows[m-1];
     }
     const double c2 = (1-c1);
@@ -1107,7 +1106,7 @@ void CConfiguration::testLub2p(){
     //TODO BIG QUESTION; Since the sum is infinite it should actually completely vanish in combination with the log terms. As julian about this!
     if (sSq<9.){
         c3 = log(c2);
-        for (int m = 1; m < logmax; m++){
+        for (int m = 1; m < mmax; m++){
             SumX += ( - _minv[m] * _gX[1] + _m2inv[m] * _gX[2] ) * c1pows[m];
             //SumX += (_fXm[m] - _gX[0] - 1./m * _gX[1] + 1./(m*(m-1)) * _gX[2] ) * c1pows[m];
 
@@ -1143,7 +1142,6 @@ void CConfiguration::testLub2p(){
 Matrix3d CConfiguration::lub2p(const Vector3d &rij, const double &rsq){
     // This function returns the 3x3 SELF-lubrication part of the resistance matrix of the tracer particle, i.e. A_{11} in Jeffrey1984
     const unsigned int mmax = _fXm.size();
-    const unsigned int logmax = 9;// this needs to be less than 20. Else, _minv initialization needs to be adjusted.
 
     const double sSq = 4*rsq/pow(_pradius + _polyrad,2.);
     const Matrix3d rrT = rij * rij.transpose() / rsq;
@@ -1152,19 +1150,21 @@ Matrix3d CConfiguration::lub2p(const Vector3d &rij, const double &rsq){
     const double sinvSq = 1./sSq;
     const double sinv = sqrt(sinvSq);
     const double c1 = 4.*sinvSq;//= pow(2/s,2)
-    double c1pows[logmax];
+    double c1pows[mmax];
     c1pows[0] = 1;
-    for (int m = 1; m < logmax; m++){
+    for (int m = 1; m < mmax; m++){
         c1pows[m] = c1 * c1pows[m-1];
     }
     const double c2 = (1-c1);
     double c3 = 0;//this needs to be zero, if s>3 and log not computed
     double SumX = 0;
     double SumY = 0;
-    //TODO BIG QUESTION; Since the sum is infinite it should actually completely vanish in combination with the log terms. As julian about this!
-    if (sSq<9.){
+    /*[SOLVED] BIG QUESTION; Since the sum is infinite it should actually completely vanish in combination with the log terms.
+    But! The log terms in combination with a limited m is what makes this form correct and converge for small s, as stated in Jeffrey1984
+    */
+    if (sSq<10.){
         c3 = log(c2);
-        for (int m = 1; m < logmax; m++){
+        for (int m = 1; m < mmax; m++){
             SumX += ( - _minv[m] * _gX[1] + _m2inv[m] * _gX[2] ) * c1pows[m];
             //SumX += (_fXm[m] - _gX[0] - 1./m * _gX[1] + 1./(m*(m-1)) * _gX[2] ) * c1pows[m];
 
