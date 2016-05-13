@@ -84,7 +84,7 @@ CConfiguration::CConfiguration( double timestep, model_param_desc modelpar, sim_
     // Configurations
     _EwaldTest = modelpar.EwaldTest; // Predefine _edgeParticles. Ewaldtest = 0 runs normal. Ewaldtest = 1 runs the program with only spheres in the corners of the cells, i.e. _edgeParticles = 1, EwaldTest = 2 with 2 edgeparticles, and so on
     _noEwald = false;       // noEwald to use normal Rotne Prager instead of Ewald summed one
-    _2DLattice = true;     //This creates a 2D lattice like in Phillips1990. I will be able to compare my data to settle whether my HI is correct.
+    _2DLattice = false;     //This creates a 2D lattice like in Phillips1990. I will be able to compare my data to settle whether my HI is correct.
 
     _Vinv = 1./pow( _boxsize, 3 );
     _cutoffMMsq = pow(0.05*_boxsize/_n_cellsAlongb,2);
