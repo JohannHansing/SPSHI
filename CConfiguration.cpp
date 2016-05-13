@@ -84,6 +84,7 @@ CConfiguration::CConfiguration( double timestep, model_param_desc modelpar, sim_
     // Configurations
     _EwaldTest = modelpar.EwaldTest; // Predefine _edgeParticles. Ewaldtest = 0 runs normal. Ewaldtest = 1 runs the program with only spheres in the corners of the cells, i.e. _edgeParticles = 1, EwaldTest = 2 with 2 edgeparticles, and so on
     _noEwald = false;       // noEwald to use normal Rotne Prager instead of Ewald summed one
+    _2DLattice = true;     //This creates a 2D lattice like in Phillips1990. I will be able to compare my data to settle whether my HI is correct.
 
     _Vinv = 1./pow( _boxsize, 3 );
     _cutoffMMsq = pow(0.05*_boxsize/_n_cellsAlongb,2);
@@ -108,6 +109,7 @@ CConfiguration::CConfiguration( double timestep, model_param_desc modelpar, sim_
     if (_ranRod) cout << "NOTE: Fixed number of rods in plane as 9*nrods!" << endl;
     if (_ranRod) _testcue += "/RPYOverlap/fixnrods1";
     if ( _noEwald ) _testcue += "/noEwald";
+    if (_2DLattice) _testcue += "/2DLattice";
     if ( _EwaldTest > 0 ) _testcue += "/EwaldTest" + toString(_EwaldTest);
     if ( _n_cellsAlongb != 1 ){
         _testcue += "/n" + toString(_n_cellsAlongb);
@@ -396,8 +398,9 @@ void CConfiguration::saveXYZTraj(string name, const int& move, string a_w){
     boxCoordinates << _boxsize *_boxnumberXYZ[0], _boxsize *_boxnumberXYZ[1], _boxsize *_boxnumberXYZ[2];
     Vector3d rtmp;
     FILE *f = fopen(name.c_str(), a_w.c_str());
+    bool writeSpheres= ( _ranRod || _2DLattice || _EwaldTest != 0);
 
-    if (!(_ranSpheres || _ranRod)){
+    if (!writeSpheres){
         fprintf(f, "%d\n%s (%8.3f %8.3f %8.3f) t=%d \n", 1, "sim_name", _boxsize, _boxsize, _boxsize, move);
     }
     else fprintf(f, "%d\n%s (%8.3f %8.3f %8.3f) t=%d \n", _polySpheres.size() + 1, "sim_name", _boxsize, _boxsize, _boxsize, move);
@@ -406,7 +409,7 @@ void CConfiguration::saveXYZTraj(string name, const int& move, string a_w){
     rtmp = _ppos;//+boxCoordinates;
     fprintf(f, "%3s%9.3f%9.3f%9.3f \n","O", rtmp(0), rtmp(1),  rtmp(2));   // relative position in box
 
-    if (_ranSpheres || _ranRod){
+    if (writeSpheres){
         for (unsigned int i = 0; i < _polySpheres.size(); i++) {
             rtmp = _polySpheres[i].pos;//+boxCoordinates;
             fprintf(f, "%3s%9.3f%9.3f%9.3f \n","H", rtmp(0), rtmp(1),  rtmp(2));
@@ -507,7 +510,7 @@ bool CConfiguration::testOverlap(){
 
 
     //"PROPER" METHOD FOR EwaldTest, where the overlap is calculated for spheres in the corners, not rods.
-    if ((_EwaldTest != 0)){
+    if ((_EwaldTest != 0 || _2DLattice)){
         Vector3d vrij;
         for (unsigned int j = 0; j < _polySpheres.size(); j++){
             vrij = minImage(_ppos - _polySpheres[j].pos);
@@ -590,6 +593,32 @@ void CConfiguration::initPolySpheres(){
                 for (unsigned int i = 0; i < zeroPos.size(); i++){
                     _polySpheres.push_back( CPolySphere( zeroPos[i] + nvec * _boxsize/_n_cellsAlongb ) );
                     //cout << "----" << _polySpheres[i].pos << endl;
+                }
+            }
+        }
+    }
+    
+    // ******** Phillips1990 *********
+    // rods are arranged on a 2D square lattice. The rods point into the z-direction. The lattice is in the x-y-plane.
+    // I ONLY CHANGE THE zeroPos Vector3d Array!
+    if (_2DLattice){
+        _polySpheres.clear();
+        nvec = Vector3d::Zero();
+        zeroPos.resize(_edgeParticles);
+        for (int i = 0; i < _edgeParticles; i++){
+            double tmp = i * _sphereoffset;
+            zeroPos[i](0) = 0;
+            zeroPos[i](1) = 0;
+            zeroPos[i](2) = tmp;
+        }
+        for (int nx=0; nx < _n_cellsAlongb; nx++){
+            for (int ny=0; ny < _n_cellsAlongb; ny++){
+                for (int nz=0; nz < _n_cellsAlongb; nz++){
+                    nvec << nx, ny, nz; // Position of 0 corner of the simulation box
+                    for (unsigned int i = 0; i < zeroPos.size(); i++){
+                        _polySpheres.push_back( CPolySphere( zeroPos[i] + nvec * _boxsize/_n_cellsAlongb ) );
+                        //cout << "----" << _polySpheres[i].pos << endl;
+                    }
                 }
             }
         }

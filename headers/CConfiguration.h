@@ -27,7 +27,7 @@
 
 #define ifdebug(x)
 #define iftestEwald(x)  
-#define iftestLub2p(x) 
+#define iftestLub2p(x)
 
 class CConfiguration {
     /*Class where all the configuration variables such as potRange etc. and also most functions for the
@@ -61,6 +61,7 @@ private:
     bool _hpi;
     bool _noLub;
     bool _ranRod;
+    bool _2DLattice;
 
     //COUNTERS AND INIT VALUES
     int _boxnumberXYZ[3];           //counter to calculate the actual position of the particle

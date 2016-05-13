@@ -25,7 +25,7 @@ def RotnePrager(rvec, p, a):
 def getInvRP(rvec,p,a,i=0,j=0,full=False):
     RP2p = np.identity(6)
     RP2p[0:3,3:] = RotnePrager(rvec, p, a=a)
-    RP2p[3:,0:3] = RotnePrager(rvec, p, a=a)
+    RP2p[3:,0:3] = RP2p[0:3,3:]
     RP2p[3:,3:] = np.identity(3) * p/a
     if full:
         return (LA.inv(RP2p)[:3,:3])

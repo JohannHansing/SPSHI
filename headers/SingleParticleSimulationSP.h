@@ -43,7 +43,7 @@ void createDataFolder(string testcue){
     char range[5];
     sprintf(range, "%.3f", _modelpar.urange);
     //In the definition of folder, the addition has to START WITH A STRING! for the compiler to know what to do (left to right).
-    _files.folder = "sim_data/newlub/noreset";
+    _files.folder = "sim_data/noreset";
     if (_triggers.fitRPinv) _files.folder = _files.folder + "/fitRPinv";
     if (_triggers.ranRod) _files.folder = _files.folder +  "/ranRod";
     if (_triggers.trueRan) _files.folder = _files.folder +  "/trueRan";
