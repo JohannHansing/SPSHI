@@ -231,12 +231,12 @@ if (_triggers.ranRod && _modelpar.ustrength !=0){
             stepcheck = conf.makeStep();    //move particle at the end of iteration
 
 
-            /* //TODO steric2
-            if (includeSteric && conf.testOverlap()) conf.moveBack();
-            else boxcheck = conf.checkBoxCrossing();
-            */ // end steric2
+            //TODO steric2
+            //if (_triggers.includeSteric && conf.testOverlap()) conf.moveBack();
+            //else boxcheck = conf.checkBoxCrossing();
+            // end steric2
 
-                //TODO steric
+            //TODO steric
             int cnt=0;
             while (_triggers.includeSteric && conf.testOverlap()){
                 conf.moveBack();
