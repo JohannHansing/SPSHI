@@ -794,6 +794,8 @@ void CConfiguration::calcTracerMobilityMatrix(const bool& full){
             // TODO Mreci Tracer
             // else muij = realSpcSm( vec_rij, false, asq ) + reciprocalSpcSm( vec_rij, asq );
             else muij = realSpcSm( vec_rij, false, asq ) + reciprocalSpcSmTracer( vec_rij );
+            //TODO del
+            //cout << "realSm\n" << realSpcSm( vec_rij, false, asq )<< "\nreciSm\n" << reciprocalSpcSmTracer( vec_rij ) << endl;
 
             _mobilityMatrix.block<3,3>(j_count,0) = muij;
             _mobilityMatrix.block<3,3>(0,j_count) = muij;
@@ -938,7 +940,6 @@ void CConfiguration::initMreciprocalTracer(){
                     kvec(0) = n1 * ntok, kvec(1) = n2 * ntok, kvec(2) = n3 * ntok;
                     const double ksq = kvec.squaredNorm();
                     if ( ksq <= k_cutoffsq ){
-                        //TODO It seems like I could precalculate everything here, except the cos() term! Especially precalculating the reciprocalSpcM This will make the code much faster!
                         _kvec_arr.push_back( kvec );
                         _Mreciprocal_arr.push_back( reciprocalSpcM(ksq, kvec, asq) );
                     }
@@ -957,6 +958,8 @@ Matrix3d  CConfiguration::reciprocalSpcSmTracer( const Vector3d & rij ){  // Thi
     const int imax = _kvec_arr.size();
     for (int i = 0; i < imax ; i++){
         Mreciprocal += _Mreciprocal_arr[i] * cos((_kvec_arr[i].dot(rij)));
+        //TODO del
+        //cout << "!!!!! _Mreciprocal_arr[i]\n" << _Mreciprocal_arr[i] << "\ncos =" << cos((_kvec_arr[i].dot(rij))) <<  endl;
     }
 
     return Mreciprocal * _Vinv;
@@ -976,7 +979,6 @@ Matrix3d  CConfiguration::reciprocalSpcSm( const Vector3d & rij, const double& a
                     kvec(0) = n1 * ntok, kvec(1) = n2 * ntok, kvec(2) = n3 * ntok;
                     const double ksq = kvec.squaredNorm();
                     if ( ksq <= k_cutoffsq ){
-                        //TODO It seems like I could precalculate everything here, except the cos() term! Especially precalculating the reciprocalSpcM This will make the code much faster!
                         Mreciprocal += reciprocalSpcM(ksq, kvec, asq) * cos((kvec.dot(rij)));
                     }
                 }
