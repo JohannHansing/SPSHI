@@ -26,8 +26,8 @@
 
 
 #define ifdebug(x)
-#define iftestEwald(x)  
-#define iftestLub2p(x) 
+#define iftestEwald(x)   
+#define iftestLub2p(x)
 
 class CConfiguration {
     /*Class where all the configuration variables such as potRange etc. and also most functions for the
@@ -61,6 +61,7 @@ private:
     bool _hpi;
     bool _noLub;
     bool _ranRod;
+    bool _2DLattice;
 
     //COUNTERS AND INIT VALUES
     int _boxnumberXYZ[3];           //counter to calculate the actual position of the particle
@@ -638,18 +639,24 @@ public:
         _EwaldTest=1;
         _edgeParticles = _EwaldTest;
         //---- Ewald summation --------
-        _n_cellsAlongb = 7;
+        _n_cellsAlongb = 1;
         _boxsize=10*_n_cellsAlongb;
         _binv=2/_boxsize;
         _Vinv = 1./pow( _boxsize, 3 );
         _sphereoffset = (_boxsize/_n_cellsAlongb) / _edgeParticles;
+        for (int i = 0; i < 3; i++){
+            _ppos(i) = (_boxsize/_n_cellsAlongb)/2;
+        }
         initPolySpheres();
         initConstMobilityMatrix();
         calcTracerMobilityMatrix(true);
+        cout << "_ppos\n" << _ppos << endl;
+        cout << "spherepos\n" << _polySpheres[0].pos << endl;
+        cout << "Mobility Matrix \n" << _mobilityMatrix << endl;
         cout << "Ewald _tracerMM \n"<< _tracerMM << endl;
         //----- No Ewald ----------
         _noEwald = true;
-        _n_cellsAlongb = 7;
+        _n_cellsAlongb = 1;
         _boxsize=10*_n_cellsAlongb;
         _binv=2/_boxsize;
         _Vinv = 1./pow( _boxsize, 3 );
@@ -660,11 +667,16 @@ public:
         initPolySpheres();
         initConstMobilityMatrix();
         calcTracerMobilityMatrix(true);
+        cout << "No Ewald Mobility Matrix \n" << _mobilityMatrix << endl;
         cout << "No Ewald _tracerMM \n"<< _tracerMM << endl;
         
         //============================================
         // -------------- Normal System ---------------
         //============================================
+        
+        // TODO ABORT () !!!! $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+        abort();
+        // TODO ABORT () !!!! $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
         _noEwald = false;
         _EwaldTest=0;
         _edgeParticles = (int) ( ( _boxsize/_n_cellsAlongb )/(2*_polyrad) + 0.0001);// round down
@@ -688,7 +700,6 @@ public:
         initConstMobilityMatrix();
         calcTracerMobilityMatrix(true);
         cout << "Normal System No Ewald _tracerMM \n"<< _tracerMM << endl;
-        abort();
     }
     
     void testRealSpcM(){
@@ -697,10 +708,10 @@ public:
         Eigen::Vector3d rij(0,0,(_polyrad + _pradius)+1);
         double rsq = rij.squaredNorm();
         cout << "rsq " << rsq << " - rij " << rij << " - asq " << asq << endl;
-        cout << "Mreal " <<realSpcM( rsq, rij, asq);
+        cout << "Mreal \n" <<realSpcM( rsq, rij, asq);
         
-        cout <<"\n==========\n" << endl;
-        abort();
+        cout <<"\n==========\n\n" << endl;
+        //abort();
     }
 
 

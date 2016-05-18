@@ -95,9 +95,13 @@ int main(int argc, const char* argv[]){
         cout << "Error: _triggers.ranRod && _modelpar.n_cells != 1" << endl;
         return 4;
     }
-if (_triggers.ranRod && _modelpar.ustrength !=0){
-        cout << "Error: _triggers.ranRod && _modelpar.ustrength !=0.\ncalcmobility forces not yet implemented" << endl;
-        return 4;
+    if (_triggers.ranRod && _modelpar.ustrength !=0){
+            cout << "Error: _triggers.ranRod && _modelpar.ustrength !=0.\ncalcmobility forces not yet implemented" << endl;
+            return 4;
+    }
+    if (_modelpar.n_cells!=1 && _modelpar.ustrength !=0){
+            cout << "Error: _modelpar.n_cells && _modelpar.ustrength !=0.\ncalcmobility forces not yet implemented for n!=1" << endl;
+            return 4;
     }
 
 
