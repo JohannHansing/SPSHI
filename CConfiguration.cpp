@@ -794,8 +794,6 @@ void CConfiguration::calcTracerMobilityMatrix(const bool& full){
             // TODO Mreci Tracer
             // else muij = realSpcSm( vec_rij, false, asq ) + reciprocalSpcSm( vec_rij, asq );
             else muij = realSpcSm( vec_rij, false, asq ) + reciprocalSpcSmTracer( vec_rij );
-            //TODO del
-            //cout << "realSm\n" << realSpcSm( vec_rij, false, asq )<< "\nreciSm\n" << reciprocalSpcSmTracer( vec_rij ) << endl;
 
             _mobilityMatrix.block<3,3>(j_count,0) = muij;
             _mobilityMatrix.block<3,3>(0,j_count) = muij;
@@ -958,8 +956,6 @@ Matrix3d  CConfiguration::reciprocalSpcSmTracer( const Vector3d & rij ){  // Thi
     const int imax = _kvec_arr.size();
     for (int i = 0; i < imax ; i++){
         Mreciprocal += _Mreciprocal_arr[i] * cos((_kvec_arr[i].dot(rij)));
-        //TODO del
-        //cout << "!!!!! _Mreciprocal_arr[i]\n" << _Mreciprocal_arr[i] << "\ncos =" << cos((_kvec_arr[i].dot(rij))) <<  endl;
     }
 
     return Mreciprocal * _Vinv;
