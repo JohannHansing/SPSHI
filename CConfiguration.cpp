@@ -483,17 +483,6 @@ void CConfiguration::calculateExpHPI(const double &r, double& U, double& Fr){
     Fr += u / (_hpi_k * r);
 }
 
-/*void CConfiguration::calculateDHPotential(const double r, double& U, double& Fr){
-    //function to calculate an exponential Potential U = U_0 * exp(-1 * r * k)
-    // k is the interaction range. U_0 is the strength of the potential
-    //which is attractive if direction = -1, and repulsive if direction = 1
-    //The potential is weighted with kT!
-
-    U = _potStrength * exp(-1 * r / _potRange) / r;
-    Fr = U * (1/_potRange + 1/r) / r;  //This is the force divided by the distance to the rod!
-}
-*/
-
 
 void CConfiguration::modifyPot(double& U, double& Fr,const double dist){
     //function to modify the potential according to the distance along the polymer axis to the next neighbor,
@@ -812,21 +801,6 @@ void CConfiguration::calcTracerMobilityMatrix(const bool& full){
     _RMLub = _resMNoLub + lubM;
     _tracerMM = invert3x3(_RMLub);
     //cout << _tracerMM << endl << "........................." << endl;
-
-    // cout << "tracerMM\n" << _tracerMM << endl;
-//     cout << "inv(tracerMM)\n" << CholInvertPart(_tracerMM) << endl;
-//     cout << "_RMLub\n" << _RMLub << endl;
-//     cout << "---XXXX---\n";
-//     Matrix3d tmp = (_RMLub.llt().matrixL() * Matrix3d::Identity()).transpose();
-//     cout <<  tmp * _RMLub.llt().matrixL() << endl;
-//     cout << "------\n";
-//     cout << _RMLub.llt().matrixL() * Matrix3d::Identity() << endl;
-//     tmp = (_tracerMM.llt().matrixL() * Matrix3d::Identity()).transpose();
-//     cout <<  tmp  << endl;
-//     cout << "******************************" << endl;
-    //cout << "$$$$$$$ lubM $$$$$$$$$\n" << lubM << endl;
-    //cout << "############# _tracerMM #########\n" << _tracerMM << endl;
-    //cout << _ppos(0) << " " << _ppos(1) << " "<< _ppos(2) << endl;
 }
 
 
