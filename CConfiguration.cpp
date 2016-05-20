@@ -238,8 +238,8 @@ void CConfiguration::report(string reason){
     cout << "_resMNoLub:\n" << _resMNoLub << endl;
     cout << "_RMLub\n" << _RMLub << endl;
     cout << "Cholesky3x3(_RMLub)\n" << Cholesky3x3(_RMLub) << endl;
-    overlapreport();
-    testIfSpheresAreOnRods();
+    //overlapreport();
+    //testIfSpheresAreOnRods();
 }
 
 int CConfiguration::checkBoxCrossing(){
@@ -344,51 +344,51 @@ void CConfiguration::calcMobilityForces(){
         int n = 0;     // reset counter for index of next rod in plane  n = 0, 1, 2, 3 -> only needed for ranPot
         for (int nk = _min; nk < _max; nk++){
             for (int ni = _min; ni < _max; ni++){
-            r_i = _ppos(i) - ni*_boxsize;
-            r_k = _ppos(k) - nk*_boxsize;
-            //this is needed if we dont want the rods to cross each other to create a strong potential well
-            if (plane == 0){
-                r_i -= _rodDistance;
-            }
-            else if (plane == 1){
-                r_k -= _rodDistance;
-                r_i -= _rodDistance;
-            }
-
-            rSq = (r_i * r_i + r_k * r_k); //distance to the rods
-
-            if (_potStrength!=0){
-                r_abs=sqrt(rSq);
-                calculateExpPotential(r_abs, utmp, frtmp);
-            }
-
-            if (_hpi) calculateExpHPI(r_abs, utmp, frtmp);
-
-            if (_ranU){
-                utmp = utmp * _poly.get_sign(plane, n);
-                frtmp = frtmp * _poly.get_sign(plane, n);
-                if (_ppos(plane) > z2){
-                    if (! _poly.samesign(1, plane, n)){
-                        _f_mob(plane) += utmp * 4 / _boxsize;              //this takes care of the derivative of the potential modification and resulting force
-                        modifyPot(utmp, frtmp, _boxsize - _ppos(plane));
-                    }
+                utmp = 0; frtmp = 0;
+                r_i = _ppos(i) - ni*_boxsize;
+                r_k = _ppos(k) - nk*_boxsize;
+                //this is needed if we dont want the rods to cross each other to create a strong potential well
+                if (plane == 0){
+                    r_i -= _rodDistance;
                 }
-                else if (_ppos(plane) < z1){
-                    if (! _poly.samesign(-1, plane, n)){
-                        _f_mob(plane) -= utmp * 4 / _boxsize;              //this takes care of the derivative of the potential modification and resulting force
-                        modifyPot(utmp, frtmp, _ppos(plane));
-                    }
+                else if (plane == 1){
+                    r_k -= _rodDistance;
+                    r_i -= _rodDistance;
                 }
-                n++;  //index of next rod in curent plane
-            }
+
+                rSq = (r_i * r_i + r_k * r_k); //distance to the rods
+
+                if (_potStrength!=0){
+                    r_abs=sqrt(rSq);
+                    calculateExpPotential(r_abs, utmp, frtmp);
+                }
+
+                if (_hpi) calculateExpHPI(r_abs, utmp, frtmp);
+
+                if (_ranU){
+                    utmp = utmp * _poly.get_sign(plane, n);
+                    frtmp = frtmp * _poly.get_sign(plane, n);
+                    if (_ppos(plane) > z2){
+                        if (! _poly.samesign(1, plane, n)){
+                            _f_mob(plane) += utmp * 4 / _boxsize;              //this takes care of the derivative of the potential modification and resulting force
+                            modifyPot(utmp, frtmp, _boxsize - _ppos(plane));
+                        }
+                    }
+                    else if (_ppos(plane) < z1){
+                        if (! _poly.samesign(-1, plane, n)){
+                            _f_mob(plane) -= utmp * 4 / _boxsize;              //this takes care of the derivative of the potential modification and resulting force
+                            modifyPot(utmp, frtmp, _ppos(plane));
+                        }
+                    }
+                    n++;  //index of next rod in curent plane
+                }
+
+                if (_LJPot && ( rSq < LJcutSq || _hpi )) calcLJPot(rSq, utmp, frtmp);
 
 
-            if (_LJPot && ( rSq < LJcutSq || _hpi )) calcLJPot(rSq, utmp, frtmp);
-
-
-            Epot += utmp;
-            _f_mob(i) += frtmp * r_i;
-            _f_mob(k) += frtmp * r_k;
+                Epot += utmp;
+                _f_mob(i) += frtmp * r_i;
+                _f_mob(k) += frtmp * r_k;
             }
         }
     }

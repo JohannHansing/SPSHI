@@ -262,6 +262,9 @@ int main(int argc, const char* argv[]){
                 }
                 boxcheck = conf.checkBoxCrossing(); //check if particle has crossed the confinement of the box
             }// end steric
+            else{// case of LJ potential for steric
+                boxcheck = conf.checkBoxCrossing();
+            }
 
 
             if (boxcheck==1 || stepcheck==1){
