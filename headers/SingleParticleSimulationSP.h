@@ -51,7 +51,7 @@ void createDataFolder(string testcue){
     if (!testcue.empty()) _files.folder = _files.folder + "/test" + testcue;
     if (_triggers.noLub) _files.folder = _files.folder +  "/noLub";
     if (_triggers.ranPot) _files.folder = _files.folder + "/ranPot";
-    if (_triggers.includeSteric) _files.folder = _files.folder + "/steric";    //TODO steric2
+    if (_triggers.includeSteric) _files.folder = _files.folder + "/" + _triggers.stericType;    //TODO steric2
     if (_triggers.hpi) _files.folder = _files.folder + "/HPI/hpiu" + toString(_modelpar.hpi_u) + "/hpik" + toString(_modelpar.hpi_k);
     _files.folder = _files.folder
             + "/dt" + toString(_simpar.timestep)

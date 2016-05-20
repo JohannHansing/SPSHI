@@ -26,7 +26,8 @@ int main(int argc, const char* argv[]){
     _triggers.ranRod = (strcmp(argv[3] , "ranRod") == 0 ) ;
     _triggers.recordPosHisto = (strcmp(argv[4] , "true") == 0 ) ;
     _triggers.noLub = (strcmp(argv[5] , "true") == 0 ) ;
-    _triggers.includeSteric = (strcmp(argv[6] , "true") == 0 ) ;  // steric 2
+    _triggers.includeSteric = (strcmp(argv[6] , "steric") == 0 || strcmp(argv[6] , "steric2") == 0 || strcmp(argv[6] , "LJ") == 0) ;  // steric 2
+    _triggers.stericType = argv[6];
     _triggers.ranPot = (strcmp(argv[7] , "true") == 0 ) ;
     _triggers.hpi = (strcmp(argv[8] , "true") == 0 ) ;          // hpi exp
     int boolpar = 8;
@@ -69,8 +70,9 @@ int main(int argc, const char* argv[]){
 
 
     int instValIndex;                             //Counter for addInstantValue
+    const string sterictype = _triggers.stericType;
 
-    double HI = false;
+    bool HI = false;
 
     //HI
     if (_modelpar.polymersize != 0){
@@ -83,14 +85,19 @@ int main(int argc, const char* argv[]){
             command += filename + parameters;
             cout << "running: $" + command << endl;
             system(command.c_str());
-            sleep(5);         //make the programme wait for 5 seconds, such that fit script can finish
+            sleep(3);         //make the programme wait for 5 seconds, such that fit script can finish
         }
     }
-
-    if (!_triggers.includeSteric && _triggers.noLub) {
-        _triggers.includeSteric = true;
-        cout << "!!! WARNING: Lubrication is disabled.\nActivating steric interaction!!";
+    //TODO LJ vs steric
+    if (_triggers.stericType!="steric" && _triggers.noLub) {
+        cout << "!!! Error: Lubrication is disabled.\nActivating steric interaction is vital!!";
+        return 4;
     }
+    if (_triggers.includeSteric && _modelpar.n_cells>1 && _modelpar.EwaldTest==0) {
+        cout << "!!! Error: If steric interaction is enabled for cylinders, so far only n_cells = 1 can be used!";
+        return 4;
+    }
+    
     if (_triggers.ranRod && _modelpar.n_cells !=1){
         cout << "Error: _triggers.ranRod && _modelpar.n_cells != 1" << endl;
         return 4;
@@ -200,15 +207,11 @@ int main(int argc, const char* argv[]){
 
             conf.calcStochasticForces();
 
-
-            if (_modelpar.ustrength != 0) conf.calcMobilityForces();
-
+            conf.calcMobilityForces();
 
             if (((i+1)%100 == 0) && (l == 0) && _triggers.writeTrajectory){       //Save the first trajectory to file
                 conf.saveXYZTraj(traj_file, i, "a");                    // TODO change back ((i+1)%XXX == 0) to 100
             }
-
-
 
 
             if (((i+1)%_simpar.saveInt) == 0){       //saving Instant Values for each saveInt'th step!
@@ -236,26 +239,29 @@ int main(int argc, const char* argv[]){
 
 
             //TODO steric2
-            //if (_triggers.includeSteric && conf.testOverlap()) conf.moveBack();
-            //else boxcheck = conf.checkBoxCrossing();
-            // end steric2
+            if (sterictype=="steric2"){
+                if (_triggers.includeSteric && conf.testOverlap()) conf.moveBack();
+                else boxcheck = conf.checkBoxCrossing();
+            }// end steric2
+            
 
             //TODO steric
-            int cnt=0;
-            while (_triggers.includeSteric && conf.testOverlap()){
-                conf.moveBack();
-                conf.calcStochasticForces();
-                stepcheck = conf.makeStep();
-                ifdebug ((cout << "moveBack!");) //conf.moveBackReport();)
-                cnt++;
-                if (cnt==300){
-                cout << "Bad particle position. Cannot avoid overlap with moveBack." << endl;
-                conf.saveXYZTraj(("tmptrajMakeStepErr.xyz"), 0, "w");
-                return 4;
+            else if (sterictype=="steric"){
+                int cnt=0;
+                while (_triggers.includeSteric && conf.testOverlap()){
+                    conf.moveBack();
+                    conf.calcStochasticForces();
+                    stepcheck = conf.makeStep();
+                    ifdebug ((cout << "moveBack!");) //conf.moveBackReport();)
+                    cnt++;
+                    if (cnt==300){
+                    cout << "Bad particle position. Cannot avoid overlap with moveBack." << endl;
+                    conf.saveXYZTraj(("tmptrajMakeStepErr.xyz"), 0, "w");
+                    return 4;
+                    }
                 }
-            }
-            boxcheck = conf.checkBoxCrossing(); //check if particle has crossed the confinement of the box
-            // end steric
+                boxcheck = conf.checkBoxCrossing(); //check if particle has crossed the confinement of the box
+            }// end steric
 
 
             if (boxcheck==1 || stepcheck==1){

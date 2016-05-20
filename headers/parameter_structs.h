@@ -36,6 +36,7 @@ struct sim_triggers {
     bool ranSpheres;
     bool trueRan;
     bool ranRod;
+    string stericType;
 };
 
 struct file_desc {

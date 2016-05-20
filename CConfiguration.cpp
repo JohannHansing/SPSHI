@@ -6,8 +6,6 @@ using namespace Eigen;
 using namespace std;
 
 
-
-const double _6root2 = 1.122462;
 const double _srqtPi = sqrt (M_PI);
 
 
@@ -36,7 +34,7 @@ CConfiguration::CConfiguration( double timestep, model_param_desc modelpar, sim_
     _trueRan = triggers.trueRan;
     _ranRod = triggers.ranRod;
     _noLub = triggers.noLub;
-    _LJPot = (triggers.includeSteric == false) && (modelpar.particlesize != 0);
+    _LJPot = (triggers.stericType == "LJ");
     _ranU = triggers.ranPot;
     _poly = CPolymers();
     _upot = 0;
@@ -96,7 +94,8 @@ CConfiguration::CConfiguration( double timestep, model_param_desc modelpar, sim_
     if (_ranRod) initRodsVec();//Needs to be before initPolySpheres!
     initPolySpheres();
     if (_HI) {
-        _LJPot = false;
+        // TODO LJ
+        //_LJPot = false;
     // THIS NEEDS TO COME LAST !!!!!!!
         initConstMobilityMatrix();
         calcTracerMobilityMatrix(true);
@@ -325,7 +324,7 @@ void CConfiguration::calcStochasticForces(){
 
 void CConfiguration::calcMobilityForces(){
     //calculate mobility forces from potential Epot - Unified version that includes 2ndOrder if k is larger than or equal 0.2 b , except if ranPot is activated.
-    double r_abs = 0;
+    double rSq = 0, r_abs  = 0;
     double r_i = 0, r_k = 0;
     double utmp = 0, frtmp = 0;     //temporary "hilfsvariables"
     double Epot = 0;
@@ -336,7 +335,7 @@ void CConfiguration::calcMobilityForces(){
     }
     //reset mobility forces to zero
     _f_mob = Vector3d::Zero();
-    const double r_c = _6root2 * _pradius;    //cutoff for Lennard-Jones calculation (at minimum)
+    const double LJcutSq = 1.25992 * _stericrSq;    //cutoff for Lennard-Jones calculation (at minimum)
 
     for (int i = 0; i < 3; i++){
         int k = i + 1;   //k always one direction "further", i.e. if i = 0 = x-direction, then k = 1 = y-direction
@@ -356,9 +355,12 @@ void CConfiguration::calcMobilityForces(){
                 r_i -= _rodDistance;
             }
 
-            r_abs = sqrt(r_i * r_i + r_k * r_k); //distance to the rods
+            rSq = (r_i * r_i + r_k * r_k); //distance to the rods
 
-            calculateExpPotential(r_abs, utmp, frtmp);
+            if (_potStrength!=0){
+                r_abs=sqrt(rSq);
+                calculateExpPotential(r_abs, utmp, frtmp);
+            }
 
             if (_hpi) calculateExpHPI(r_abs, utmp, frtmp);
 
@@ -381,7 +383,7 @@ void CConfiguration::calcMobilityForces(){
             }
 
 
-            if (_LJPot && ( r_abs < r_c || _hpi )) calcLJPot(r_abs, utmp, frtmp);
+            if (_LJPot && ( rSq < LJcutSq || _hpi )) calcLJPot(rSq, utmp, frtmp);
 
 
             Epot += utmp;
@@ -555,11 +557,11 @@ bool CConfiguration::testOverlap(){
 
 
 
-void CConfiguration::calcLJPot(const double& r, double& U, double& Fr){
+void CConfiguration::calcLJPot(const double& rSq, double& U, double& Fr){
     //Function to calculate the Lennard-Jones Potential
-    double  por6 = pow((_pradius / r ), 6);      //por6 stands for "p over r to the power of 6" . The 2 comes from the fact, that I need the particle radius, not the particle size
+    double  por6 = pow((_stericrSq / rSq ), 3);      //por6 stands for "p over r to the power of 6" .
     U += 4 * ( por6*por6 - por6 + 0.25 );
-    Fr +=  24 / ( r * r ) * ( 2 * por6*por6 - por6 );
+    Fr +=  24 / ( rSq ) * ( 2 * por6*por6 - por6 );
 }
 
 

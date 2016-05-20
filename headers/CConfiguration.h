@@ -86,6 +86,9 @@ private:
     Eigen::Vector3d _f_sto;
     Eigen::Vector3d _Vdriftdt;
     Eigen::Vector3d _V0dt;
+    
+    //Steric interaction parameters
+    double _stericrSq;
 
 	//HI Paramters
 	std::vector<CPolySphere> _polySpheres;
@@ -102,7 +105,6 @@ private:
     double _sphereoffset;
     double _lastcheck[3];
     double _cutoffMMsq;
-    double _stericrSq;
     int _n_cellsAlongb;
     bool _fitRPinv;
     // LOAD OF CRAP I THINK! This term is a correction for the tracer displacement at every time step due to the repeated tracer particle. It is needed to ensure that the average velocity of all particles in the system is 0. It equals (1-1/N) where N is the number of particles int the simulation box. For reference, see Durlofsky1987a page 3333 - Fundamental solution for flow in porous media and comparison with the Brinkmann equation.
@@ -156,7 +158,7 @@ private:
     void calculateExpHPI(const double& r, double& U, double& Fr);
     void calculateExpPotential(const double& r, double& U, double& Fr);
     void modifyPot(double& U, double& Fr, const double dist);
-    void calcLJPot(const double &r, double &U, double &dU);
+    void calcLJPot(const double &rSq, double &U, double &dU);
     void initConstMobilityMatrix();
     Eigen::Matrix3d CholInvertPart (const Eigen::MatrixXd &A);
     Eigen::Matrix3d ConjGradInvert(const Eigen::MatrixXd &A);
