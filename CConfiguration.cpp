@@ -34,7 +34,8 @@ CConfiguration::CConfiguration( double timestep, model_param_desc modelpar, sim_
     _trueRan = triggers.trueRan;
     _ranRod = triggers.ranRod;
     _noLub = triggers.noLub;
-    _LJPot = (triggers.stericType == "LJ");
+    _LJPot = (triggers.stericType == "LJ" || triggers.stericType == "LJ05" );
+    if ( triggers.stericType == "LJ05" ) _epsilonLJ = 0.5;
     _ranU = triggers.ranPot;
     _poly = CPolymers();
     _upot = 0;
@@ -560,8 +561,8 @@ bool CConfiguration::testOverlap(){
 void CConfiguration::calcLJPot(const double& rSq, double& U, double& Fr){
     //Function to calculate the Lennard-Jones Potential
     double  por6 = pow((_stericrSq / rSq ), 3);      //por6 stands for "p over r to the power of 6" .
-    U += 4 * ( por6*por6 - por6 + 0.25 );
-    Fr +=  24 / ( rSq ) * ( 2 * por6*por6 - por6 );
+    U += 4. * _epsilonLJ * ( por6*por6 - por6 + 0.25 );
+    Fr +=  24. * _epsilonLJ / ( rSq ) * ( 2 * por6*por6 - por6 );
 }
 
 

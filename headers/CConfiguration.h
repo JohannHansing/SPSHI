@@ -89,6 +89,7 @@ private:
     
     //Steric interaction parameters
     double _stericrSq;
+    double _epsilonLJ = 1.;
 
 	//HI Paramters
 	std::vector<CPolySphere> _polySpheres;
