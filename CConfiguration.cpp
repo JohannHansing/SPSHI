@@ -200,7 +200,7 @@ int CConfiguration::makeStep(){
         if (_HI && !_noLub) _Vdriftdt = midpointScheme(_V0dt, _f_mob);   //TODO  Enable mid-point-scheme / backflow
 
         v_nan = std::isnan(_Vdriftdt(0));
-        lrgDrift = (_Vdriftdt.squaredNorm() > 0.3);
+        lrgDrift = (_Vdriftdt.squaredNorm() > 2);
 
         if (v_nan || lrgDrift) {
             cout << "is Nan = " << v_nan << "    -   largeDrift? = " << lrgDrift << endl;
