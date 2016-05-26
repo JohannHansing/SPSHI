@@ -26,7 +26,7 @@ int main(int argc, const char* argv[]){
     _triggers.ranRod = (strcmp(argv[3] , "ranRod") == 0 ) ;
     _triggers.recordPosHisto = (strcmp(argv[4] , "true") == 0 ) ;
     _triggers.noLub = (strcmp(argv[5] , "true") == 0 ) ;
-    _triggers.includeSteric = (strcmp(argv[6] , "steric") == 0 || strcmp(argv[6] , "steric2") == 0 || strcmp(argv[6] , "LJ") == 0 || strcmp(argv[6] , "LJ05") == 0) ;
+    _triggers.includeSteric = (strcmp(argv[6] , "steric") == 0 || strcmp(argv[6] , "steric2") == 0 || strcmp(argv[6] , "LJ") == 0 || strcmp(argv[6] , "LJ025") == 0) ;
     _triggers.stericType = argv[6];
     _triggers.ranPot = (strcmp(argv[7] , "true") == 0 ) ;
     _triggers.hpi = (strcmp(argv[8] , "true") == 0 ) ;          // hpi exp

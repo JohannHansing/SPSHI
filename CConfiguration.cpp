@@ -34,8 +34,8 @@ CConfiguration::CConfiguration( double timestep, model_param_desc modelpar, sim_
     _trueRan = triggers.trueRan;
     _ranRod = triggers.ranRod;
     _noLub = triggers.noLub;
-    _LJPot = (triggers.stericType == "LJ" || triggers.stericType == "LJ05" );
-    if ( triggers.stericType == "LJ05" ) _epsilonLJ = 0.5;
+    _LJPot = (triggers.stericType == "LJ" || triggers.stericType == "LJ025" );
+    if ( triggers.stericType == "LJ025" ) _epsilonLJ = 0.25;
     _ranU = triggers.ranPot;
     _poly = CPolymers();
     _upot = 0;
