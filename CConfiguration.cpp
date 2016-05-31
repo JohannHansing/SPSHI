@@ -60,12 +60,6 @@ CConfiguration::CConfiguration( double timestep, model_param_desc modelpar, sim_
     }
 
 
-    // This is for inclusion of 2nd Order rods if k is 0.2b or larger
-    _min = -1, _max = 3;
-    if (_ranU || _hpi || (_potRange < 2)){
-        _min = 0;
-        _max = 2;
-    }
 
     //Ewald sum stuff
     _nmax = modelpar.nmax; // This corresponds to the r_cutoff = _nmax * _boxsize
@@ -341,7 +335,7 @@ void CConfiguration::calcMobilityForces(){
     double cellwidth = _boxsize/_n_cellsAlongb;
     unsigned int cnt=0;
     int mx=0;// Extra box if range is larger than 0.2b.
-    if (_potRange >= 2) mx=1;
+    if (_ranU || _hpi || _potRange >= 2) mx=1;
     for (int i = 0; i < 2; i++){
         for (int k = i+1; k < 3; k++){
             for (int n_i = -mx; n_i <= _n_cellsAlongb + mx; n_i++ ){
