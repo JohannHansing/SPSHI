@@ -76,6 +76,7 @@ private:
     int _posHistoM[100][100][100];
     int _min, _max;        // parameters for determining up to which order neighboring rods are considered for the potential
     int _EwaldTest;
+    
 
     string _testcue;
 
@@ -90,6 +91,8 @@ private:
     //Steric interaction parameters
     double _stericrSq;
     double _epsilonLJ = 1.;
+    int _Nrods;// (n_cells+1)^2 would be for first order summation, but here we always do second order summation (n_cells+3)^2
+    std::vector<double> _rSq_arr, _ri_arr, _rk_arr;
 
 	//HI Paramters
 	std::vector<CPolySphere> _polySpheres;

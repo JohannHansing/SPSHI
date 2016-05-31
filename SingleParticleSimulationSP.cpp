@@ -64,6 +64,7 @@ int main(int argc, const char* argv[]){
     if (_modelpar.lubcutint == 0) _modelpar.lubcutint = 9;
     if (_modelpar.nmax == 0) _modelpar.nmax = 3;
     if (_modelpar.n_cells == 0) _modelpar.n_cells = 1;
+    if (_modelpar.boxsize == 0) _modelpar.boxsize = 10*_modelpar.n_cells;
 
     // first argument must be the name of the parameter file
     // read_run_params(("../jobs/input/" + toString(argv[1]) + ".txt").c_str());
@@ -93,10 +94,7 @@ int main(int argc, const char* argv[]){
         cout << "!!! Error: Lubrication is disabled.\nActivating steric interaction is vital!!";
         return 4;
     }
-    if (_triggers.includeSteric && _modelpar.n_cells>1 && _modelpar.EwaldTest==0) {
-        cout << "!!! Error: If steric interaction is enabled for cylinders, so far only n_cells = 1 can be used!";
-        return 4;
-    }
+    
     
     if (_triggers.ranRod && _modelpar.n_cells !=1){
         cout << "Error: _triggers.ranRod && _modelpar.n_cells != 1" << endl;
@@ -106,10 +104,7 @@ int main(int argc, const char* argv[]){
             cout << "Error: _triggers.ranRod && _modelpar.ustrength !=0.\ncalcmobility forces not yet implemented" << endl;
             return 4;
     }
-    if (_modelpar.n_cells!=1 && _modelpar.ustrength !=0){
-            cout << "Error: _modelpar.n_cells && _modelpar.ustrength !=0.\ncalcmobility forces not yet implemented for n!=1" << endl;
-            return 4;
-    }
+    
 
 
 

@@ -47,6 +47,8 @@ CConfiguration::CConfiguration( double timestep, model_param_desc modelpar, sim_
     _hpi_u = modelpar.hpi_u;
     _hpi_k = modelpar.hpi_k;
     _binv = 2./_boxsize;//this needs to be 2/b apparently
+    _Nrods = 3*pow((_n_cellsAlongb+3), 2);
+    _rSq_arr.resize(_Nrods), _ri_arr.resize(_Nrods), _rk_arr.resize(_Nrods);
     for (int i = 0; i < 3; i++){
         _ppos(i) = _resetpos;
         _startpos(i) = _resetpos;
@@ -323,73 +325,78 @@ void CConfiguration::calcStochasticForces(){
 }
 
 
-void CConfiguration::calcMobilityForces(){
-    //calculate mobility forces from potential Epot - Unified version that includes 2ndOrder if k is larger than or equal 0.2 b , except if ranPot is activated.
-    double rSq = 0, r_abs  = 0;
-    double r_i = 0, r_k = 0;
-    double utmp = 0, frtmp = 0;     //temporary "hilfsvariables"
+void CConfiguration::calcMobilityForces(){    
+    double rExpCutoff = pow(8*_potRange,2);// Cutoff for calculation of exponential interaction potential
     double Epot = 0;
     double z1, z2;
     if (_ranU){
-        z1 = 1/4 * _boxsize;
+        z1 = 1./4 * _boxsize;
         z2 = _boxsize - z1;   //z is in cylindrical coordinates. This indicates above/below which value the exp potential is modifed for random signs.
     }
     //reset mobility forces to zero
     _f_mob = Vector3d::Zero();
     const double LJcutSq = 1.25992 * _stericrSq;    //cutoff for Lennard-Jones calculation (at minimum)
-
-    for (int i = 0; i < 3; i++){
-        int k = i + 1;   //k always one direction "further", i.e. if i = 0 = x-direction, then k = 1 = y-direction
-        if ( k == 3 ) k = 0;
-        int plane = 3 - (i+k); //this is the current plane of the cylindrical coordinates
-        int n = 0;     // reset counter for index of next rod in plane  n = 0, 1, 2, 3 -> only needed for ranPot
-        for (int nk = _min; nk < _max; nk++){
-            for (int ni = _min; ni < _max; ni++){
-                utmp = 0; frtmp = 0;
-                r_i = _ppos(i) - ni*_boxsize;
-                r_k = _ppos(k) - nk*_boxsize;
-                //this is needed if we dont want the rods to cross each other to create a strong potential well
-                if (plane == 0){
-                    r_i -= _rodDistance;
+    
+    // Calc rod distances loop (taken from testOverlap function)
+    double cellwidth = _boxsize/_n_cellsAlongb;
+    unsigned int cnt=0;
+    int mx=0;// Extra box if range is larger than 0.2b.
+    if (_potRange >= 2) mx=1;
+    for (int i = 0; i < 2; i++){
+        for (int k = i+1; k < 3; k++){
+            for (int n_i = -mx; n_i <= _n_cellsAlongb + mx; n_i++ ){
+                double r_i = _ppos(i) - cellwidth * n_i;
+                for (int n_k = -mx; n_k <= _n_cellsAlongb + mx; n_k++ ){
+                    _ri_arr[cnt] = r_i;
+                    _rk_arr[cnt] = _ppos(k) - cellwidth * n_k;
+                    _rSq_arr[cnt] = _ri_arr[cnt] * _ri_arr[cnt] + _rk_arr[cnt] * _rk_arr[cnt]; //distance to the rods
+                    cnt++;
                 }
-                else if (plane == 1){
-                    r_k -= _rodDistance;
-                    r_i -= _rodDistance;
-                }
+            }
+        }
+    }
 
-                rSq = (r_i * r_i + r_k * r_k); //distance to the rods
-
-                if (_potStrength!=0){
-                    r_abs=sqrt(rSq);
-                    calculateExpPotential(r_abs, utmp, frtmp);
-                }
-
-                if (_hpi) calculateExpHPI(r_abs, utmp, frtmp);
-
-                if (_ranU){
-                    utmp = utmp * _poly.get_sign(plane, n);
-                    frtmp = frtmp * _poly.get_sign(plane, n);
-                    if (_ppos(plane) > z2){
-                        if (! _poly.samesign(1, plane, n)){
-                            _f_mob(plane) += utmp * 4 / _boxsize;              //this takes care of the derivative of the potential modification and resulting force
-                            modifyPot(utmp, frtmp, _boxsize - _ppos(plane));
-                        }
+    
+    // Calc potentials
+    cnt=0;
+    for (int i = 0; i < 2; i++){
+        for (int k = i+1; k < 3; k++){
+            for (int n_i = -mx; n_i <= _n_cellsAlongb + mx; n_i++ ){
+                for (int n_k = -mx; n_k <= _n_cellsAlongb + mx; n_k++ ){
+                    double utmp = 0, frtmp = 0;
+                    double rSq=_rSq_arr[cnt];
+                    if (_potStrength!=0 && rSq < rExpCutoff){
+                        double r_abs=sqrt(rSq);
+                        calculateExpPotential(r_abs, utmp, frtmp);
                     }
-                    else if (_ppos(plane) < z1){
-                        if (! _poly.samesign(-1, plane, n)){
-                            _f_mob(plane) -= utmp * 4 / _boxsize;              //this takes care of the derivative of the potential modification and resulting force
-                            modifyPot(utmp, frtmp, _ppos(plane));
-                        }
+                    if (_ranU){
+                        cout << "ERROR: Not yet implemented. Abort!";
+                        abort();
+                        // utmp = utmp * _poly.get_sign(plane, n);
+//                         frtmp = frtmp * _poly.get_sign(plane, n);
+//                         if (_ppos(plane) > z2){
+//                             if (! _poly.samesign(1, plane, n)){
+//                                 _f_mob(plane) += utmp * 4 / _boxsize;              //this takes care of the derivative of the potential modification and resulting force
+//                                 modifyPot(utmp, frtmp, _boxsize - _ppos(plane));
+//                             }
+//                         }
+//                         else if (_ppos(plane) < z1){
+//                             if (! _poly.samesign(-1, plane, n)){
+//                                 _f_mob(plane) -= utmp * 4 / _boxsize;              //this takes care of the derivative of the potential modification and resulting force
+//                                 modifyPot(utmp, frtmp, _ppos(plane));
+//                             }
+//                         }
+//                         n++;  //index of next rod in curent plane
                     }
-                    n++;  //index of next rod in curent plane
+
+                    if (_LJPot && ( rSq < LJcutSq || _hpi )) calcLJPot(rSq, utmp, frtmp);
+
+
+                    Epot += utmp;
+                    _f_mob(i) += frtmp * _ri_arr[cnt];
+                    _f_mob(k) += frtmp * _rk_arr[cnt];
+                    cnt++;
                 }
-
-                if (_LJPot && ( rSq < LJcutSq || _hpi )) calcLJPot(rSq, utmp, frtmp);
-
-
-                Epot += utmp;
-                _f_mob(i) += frtmp * r_i;
-                _f_mob(k) += frtmp * r_k;
             }
         }
     }
