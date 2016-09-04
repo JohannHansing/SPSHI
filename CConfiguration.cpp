@@ -96,7 +96,7 @@ CConfiguration::CConfiguration( double timestep, model_param_desc modelpar, sim_
     // THIS NEEDS TO COME LAST !!!!!!!
         initConstMobilityMatrix();
         calcTracerMobilityMatrix(true);
-    //_pbc_corr = 1 - 1/(_polySpheres.size()+1); // assign system size dependent value to pbc correction for tracer displacement in porous medium
+    //_pbc_corr = 1 - 1/(_N_polyspheres+1); // assign system size dependent value to pbc correction for tracer displacement in porous medium
     }
 
     // TEST CUE to modify the directory the output data is written to!!
@@ -160,7 +160,7 @@ Vector3d CConfiguration::midpointScheme(const Vector3d & V0dt, const Vector3d & 
     Matrix3d lubM = Matrix3d::Zero();
 
 // loop over tracer - particle mobility matrix elements
-    for (unsigned int j = 0; j < _polySpheres.size(); j++){
+    for (unsigned int j = 0; j < _N_polyspheres; j++){
         vec_rij = ppos_prime - _polySpheres[j].pos;
         lubM += lubricate(vec_rij);
     }
@@ -320,7 +320,7 @@ void CConfiguration::calcStochasticForces(){
 
 
 void CConfiguration::calcMobilityForces(){    
-    double rExpCutoff = pow(8*_potRange,2);// Cutoff for calculation of exponential interaction potential
+    double rExpCutoff = pow(8*_potRange,2)+ _stericrSq;// Cutoff for calculation of exponential interaction potential
     double Epot = 0;
     double z1, z2;
     if (_ranU){
@@ -333,32 +333,17 @@ void CConfiguration::calcMobilityForces(){
     
     // Calc rod distances loop (taken from testOverlap function)
     double cellwidth = _boxsize/_n_cellsAlongb;
-    unsigned int cnt=0;
     int mx=0;// Extra box if range is larger than 0.2b.
     if (_ranU || _hpi || _potRange >= 2) mx=1;
     for (int i = 0; i < 2; i++){
         for (int k = i+1; k < 3; k++){
             for (int n_i = -mx; n_i <= _n_cellsAlongb + mx; n_i++ ){
                 double r_i = _ppos(i) - cellwidth * n_i;
-                for (int n_k = -mx; n_k <= _n_cellsAlongb + mx; n_k++ ){
-                    _ri_arr[cnt] = r_i;
-                    _rk_arr[cnt] = _ppos(k) - cellwidth * n_k;
-                    _rSq_arr[cnt] = _ri_arr[cnt] * _ri_arr[cnt] + _rk_arr[cnt] * _rk_arr[cnt]; //distance to the rods
-                    cnt++;
-                }
-            }
-        }
-    }
-
-    
-    // Calc potentials
-    cnt=0;
-    for (int i = 0; i < 2; i++){
-        for (int k = i+1; k < 3; k++){
-            for (int n_i = -mx; n_i <= _n_cellsAlongb + mx; n_i++ ){
-                for (int n_k = -mx; n_k <= _n_cellsAlongb + mx; n_k++ ){
+                for (int n_k = -mx; n_k <= _n_cellsAlongb + mx; n_k++ ){                
                     double utmp = 0, frtmp = 0;
-                    double rSq=_rSq_arr[cnt];
+                    double ri = r_i;
+                    double rk = _ppos(k) - cellwidth * n_k;
+                    double rSq = ri * ri + rk * rk;
                     if (_potStrength!=0 && rSq < rExpCutoff){
                         double r_abs=sqrt(rSq);
                         calculateExpPotential(r_abs, utmp, frtmp);
@@ -387,15 +372,34 @@ void CConfiguration::calcMobilityForces(){
 
 
                     Epot += utmp;
-                    _f_mob(i) += frtmp * _ri_arr[cnt];
-                    _f_mob(k) += frtmp * _rk_arr[cnt];
-                    cnt++;
+                    _f_mob(i) += frtmp * ri;
+                    _f_mob(k) += frtmp * rk;
                 }
             }
         }
     }
     _upot = Epot;
 }
+
+
+void CConfiguration::calcMobForcesBeads(){
+    //reset mobility forces to zero
+    _f_mob = Vector3d::Zero();
+    // Calc mobility forces for EwaldTest==1 case of one sphere per cell
+    if (_EwaldTest==1){
+        Vector3d vrij;
+        Vector3d Fr=Vector3d::Zero();
+        double U = 0;
+        for (unsigned int j = 0; j < _N_polyspheres; j++){
+            vrij = minImage(_ppos - _polySpheres[j].pos);
+            double rij = vrij.norm();
+            U+=_potStrength * exp(-1 * rij / _potRange);
+            Fr+=U / (_potRange * rij) * vrij;
+        }
+        _f_mob += Fr;
+    }
+}
+
 
 void CConfiguration::saveXYZTraj(string name, const int& move, string a_w){
     Vector3d boxCoordinates;
@@ -407,14 +411,14 @@ void CConfiguration::saveXYZTraj(string name, const int& move, string a_w){
     if (!writeSpheres){
         fprintf(f, "%d\n%s (%8.3f %8.3f %8.3f) t=%d \n", 1, "sim_name", _boxsize, _boxsize, _boxsize, move);
     }
-    else fprintf(f, "%d\n%s (%8.3f %8.3f %8.3f) t=%d \n", _polySpheres.size() + 1, "sim_name", _boxsize, _boxsize, _boxsize, move);
+    else fprintf(f, "%d\n%s (%8.3f %8.3f %8.3f) t=%d \n", _N_polyspheres + 1, "sim_name", _boxsize, _boxsize, _boxsize, move);
 
     // tracer particle
     rtmp = _ppos;//+boxCoordinates;
     fprintf(f, "%3s%9.3f%9.3f%9.3f \n","O", rtmp(0), rtmp(1),  rtmp(2));   // relative position in box
 
     if (writeSpheres){
-        for (unsigned int i = 0; i < _polySpheres.size(); i++) {
+        for (unsigned int i = 0; i < _N_polyspheres; i++) {
             rtmp = _polySpheres[i].pos;//+boxCoordinates;
             fprintf(f, "%3s%9.3f%9.3f%9.3f \n","H", rtmp(0), rtmp(1),  rtmp(2));
         }
@@ -505,7 +509,7 @@ bool CConfiguration::testOverlap(){
     //"PROPER" METHOD FOR EwaldTest, where the overlap is calculated for spheres in the corners, not rods.
     if ((_EwaldTest != 0 || _2DLattice)){
         Vector3d vrij;
-        for (unsigned int j = 0; j < _polySpheres.size(); j++){
+        for (unsigned int j = 0; j < _N_polyspheres; j++){
             vrij = minImage(_ppos - _polySpheres[j].pos);
             if (vrij.squaredNorm() <= _stericrSq + 0.00001){
                 return true;
@@ -659,7 +663,7 @@ void CConfiguration::initPolySpheres(){
                                     if (_trueRan) spos(k) = _boxsize * zerotoone();
                                     //cout << "spos\n" <<spos << endl;
                                 }
-                                for (int l = 1; l < _polySpheres.size(); l++){
+                                for (int l = 1; l < _N_polyspheres; l++){
                                     vrij = minImage(spos - _polySpheres[l].pos);
                                     if (vrij.norm() < 2*_polyrad + 0.000001){
                                         overlap = true;
@@ -689,6 +693,7 @@ void CConfiguration::initPolySpheres(){
             throw 2;
         }
     }
+    _N_polyspheres = _polySpheres.size();
 
 }
 
@@ -700,10 +705,10 @@ void CConfiguration::initConstMobilityMatrix(){
     const double asq = _polyrad * _polyrad;
 
     // create mobility matrix - Some elements remain constant throughout the simulation. Those are stored here.
-    _mobilityMatrix = MatrixXd::Identity( 3 * (_polySpheres.size() + 1) , 3 * (_polySpheres.size() + 1) );
+    _mobilityMatrix = MatrixXd::Identity( 3 * (_N_polyspheres + 1) , 3 * (_N_polyspheres + 1) );
 
     // Create matrix that stores previous result of conjugate gradient method, for faster conversion.
-    _prevCG = Eigen::MatrixXd::Identity(3 * (_polySpheres.size() + 1) , 3 );
+    _prevCG = Eigen::MatrixXd::Identity(3 * (_N_polyspheres + 1) , 3 );
 
 
     // Eigen-vector for interparticle distance. Needs to initialized as zero vector for self mobilities.
@@ -723,7 +728,7 @@ void CConfiguration::initConstMobilityMatrix(){
     selfmob(2,2) += self_plus;
 
 
-    for (unsigned int i = 1; i < _polySpheres.size() + 1 ; i++) {
+    for (unsigned int i = 1; i < _N_polyspheres + 1 ; i++) {
         unsigned int i_count = 3 * i;
         /*_mobilityMatrix(0,0) = 1;  already taken care of due to identity matrix. The extra F_i0 part in the Ewald sum is only correction to reciprocal sum.
          * I leave out the reciprocal summation for the tracer particle self diff, because it is in only in the simulation box unit cell. */
@@ -735,10 +740,10 @@ void CConfiguration::initConstMobilityMatrix(){
 
     // The mobility matrix elements for the interacting edgeParticles are stored here, since they do not change position
     Matrix3d muij = Matrix3d::Zero();
-    for (unsigned int i = 0; i < _polySpheres.size(); i++){
+    for (unsigned int i = 0; i < _N_polyspheres; i++){
         unsigned int i_count = 3 * (i + 1);       // plus 1 is necessary due to omitted tracer particle
 
-        for (unsigned int j = i + 1; j < _polySpheres.size(); j++) {
+        for (unsigned int j = i + 1; j < _N_polyspheres; j++) {
             vec_rij = _polySpheres[i].pos - _polySpheres[j].pos;
             unsigned int  j_count = 3 * (j + 1);    // plus 1 is necessary due to omitted tracer particle
 
@@ -769,7 +774,7 @@ void CConfiguration::calcTracerMobilityMatrix(const bool& full){
     Matrix3d muij;
 
 // loop over tracer - particle mobility matrix elements
-    for (unsigned int j = 0; j < _polySpheres.size(); j++){
+    for (unsigned int j = 0; j < _N_polyspheres; j++){
         vec_rij = _ppos - _polySpheres[j].pos;
         if (_noEwald) vec_rij = minImage(vec_rij);
         //vec_rij = minImage(vec_rij); // tmpminim
@@ -816,20 +821,20 @@ void CConfiguration::updateMobilityMatrix(){// ONLY for ranRod, since I dont hav
     unsigned int i_count, j_count;
 
     // create mobility matrix - Some elements remain constant throughout the simulation. Those are stored here.
-    _mobilityMatrix = MatrixXd::Identity( 3 * (_polySpheres.size() + 1) , 3 * (_polySpheres.size() + 1) );
+    _mobilityMatrix = MatrixXd::Identity( 3 * (_N_polyspheres + 1) , 3 * (_N_polyspheres + 1) );
 
     // resize matrix that stores previous result of conjugate gradient method, for faster conversion.
-    _prevCG = Eigen::MatrixXd::Identity(3 * (_polySpheres.size() + 1) , 3 );
+    _prevCG = Eigen::MatrixXd::Identity(3 * (_N_polyspheres + 1) , 3 );
 
     // Eigen-vector for interparticle distance. Needs to initialized as zero vector for self mobilities.
     Vector3d vec_rij = Vector3d::Zero();
 
     //TODO maybe store i_count and j_count first.
-    //const int Nspheres = _polySpheres.size()
-    //std::array<int, _polySpheres.size()> icount_arr;
+    //const int Nspheres = _N_polyspheres
+    //std::array<int, _N_polyspheres> icount_arr;
 
     //Update the polymer Spheres mobility matrix elements
-    for (unsigned int i = 0; i < _polySpheres.size(); i++){
+    for (unsigned int i = 0; i < _N_polyspheres; i++){
         i_count = 3 * (i + 1);       // plus 1 is necessary due to omitted tracer particle
         // PolySphere Self interaction
         _mobilityMatrix.block<3,3>(i_count,i_count) *= _pradius/_polyrad;
@@ -842,7 +847,7 @@ void CConfiguration::updateMobilityMatrix(){// ONLY for ranRod, since I dont hav
 
 
         // PolySphere - PolySphere RP
-        for (unsigned int j = i + 1; j < _polySpheres.size(); j++) {
+        for (unsigned int j = i + 1; j < _N_polyspheres; j++) {
             vec_rij = _polySpheres[i].pos - _polySpheres[j].pos;
             j_count = 3 * (j + 1);    // plus 1 is necessary due to omitted tracer particle
 

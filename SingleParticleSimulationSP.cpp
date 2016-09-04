@@ -90,7 +90,7 @@ int main(int argc, const char* argv[]){
         }
     }
     //TODO LJ vs steric
-    if (_triggers.stericType!="steric" && _triggers.noLub) {
+    if (_triggers.stericType!="steric" && _triggers.stericType!="steric2" && _triggers.noLub) {
         cout << "!!! Error: Lubrication is disabled.\nActivating steric interaction is vital!!";
         return 4;
     }
@@ -202,7 +202,10 @@ int main(int argc, const char* argv[]){
 
             conf.calcStochasticForces();
 
-            conf.calcMobilityForces();
+            if (_modelpar.EwaldTest==0) conf.calcMobilityForces();
+            else conf.calcMobForcesBeads();
+            
+            
 
             if (((i+1)%100 == 0) && (l == 0) && _triggers.writeTrajectory){       //Save the first trajectory to file
                 conf.saveXYZTraj(traj_file, i, "a");                    // TODO change back ((i+1)%XXX == 0) to 100
@@ -249,7 +252,7 @@ int main(int argc, const char* argv[]){
                     stepcheck = conf.makeStep();
                     ifdebug ((cout << "moveBack!");) //conf.moveBackReport();)
                     cnt++;
-                    if (cnt==300){
+                    if (cnt==3000){
                     cout << "Bad particle position. Cannot avoid overlap with moveBack." << endl;
                     conf.saveXYZTraj(("tmptrajMakeStepErr.xyz"), 0, "w");
                     return 4;
