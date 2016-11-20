@@ -106,6 +106,7 @@ private:
     double _polydiamSq;
     double _Invpolyrad;
 	int _edgeParticles;
+	int _N_polyspheres;
     double _sphereoffset;
     double _lastcheck[3];
     double _cutoffMMsq;
@@ -207,6 +208,7 @@ public:
     int checkBoxCrossing();
     void calcStochasticForces();
     void calcMobilityForces();
+    void calcMobForcesBeads();
     void saveXYZTraj(string name, const int& move, string a_w);
     void positionHistogram(double block, double possq, double pposprev, int l, int posHisto[]);
 
