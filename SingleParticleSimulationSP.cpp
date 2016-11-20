@@ -47,7 +47,7 @@ int main(int argc, const char* argv[]){
     _simpar.simtime = atoi( argv[boolpar+3] );                   // simulation time
     _simpar.instantvalues = 200;
 
-    _modelpar.rodDist = 0;                //Deprecated
+    _modelpar.rodDist = 0;                //Deprecated -- can use argv[boolpar+4] for sth else 
     _modelpar.boxsize = atof( argv[boolpar+5] );
     _modelpar.particlesize = atof( argv[boolpar+6] );
     _modelpar.urange = atof( argv[boolpar+7] );
@@ -275,7 +275,7 @@ int main(int argc, const char* argv[]){
             if (_triggers.recordPosHisto && ((i % 5) == 0)) conf.addHistoValue();
 
         }
-        if ( _triggers.recordPosHisto ) conf.printHistoMatrix(_files.folder);
+        if ( (l%20 == 0) && _triggers.recordPosHisto ) conf.printHistoMatrix(_files.folder);
 
         if (l%100 == 0)  cout << "run " << toString(l) << endl;
     }//----------END OF RUNS-LOOP ----------------

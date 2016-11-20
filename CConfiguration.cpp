@@ -29,7 +29,6 @@ CConfiguration::CConfiguration( double timestep, model_param_desc modelpar, sim_
     _resetpos = (_boxsize/_n_cellsAlongb)/2; // puts the particle in the center of the cell at the origin
     //_resetpos = (_boxsize)/2;
     _timestep = timestep;
-    _rodDistance = modelpar.rodDist;
     _ranSpheres = triggers.ranSpheres;
     _trueRan = triggers.trueRan;
     _ranRod = triggers.ranRod;
@@ -192,6 +191,9 @@ int CConfiguration::makeStep(){
     int tmp  = 0;
     while (v_nan || lrgDrift){  // This loop repeats until the the midpoint scheme does not result in a NaN anymore!
         _V0dt = _tracerMM * (_f_mob * _timestep + _f_sto * _mu_sto);
+        //TODO del noHI
+        //_V0dt = Eigen::Matrix3d::Identity() * (_f_mob * _timestep + _f_sto * _mu_sto);
+
 
         if (_HI && !_noLub) _Vdriftdt = midpointScheme(_V0dt, _f_mob);   //TODO  Enable mid-point-scheme / backflow
 
@@ -310,6 +312,8 @@ void CConfiguration::calcStochasticForces(){
         // return correlated random vector, which is scaled later by sqrt(2 dt)
         //_f_sto = _RMLub.llt().matrixL() * ran_v;
         _f_sto = Cholesky3x3(_RMLub)  * ran_v;
+        //TODO del NoHI
+        //_f_sto=ran_v;
         //cout << "\n" << _tracerMM * Cholesky3x3(_RMLub) << "\n===========\n" << Cholesky3x3(_tracerMM) << endl;
     }
 
@@ -538,14 +542,8 @@ bool CConfiguration::testOverlap(){
         for (int k = i+1; k < 3; k++){
             for (int n_i = 0; n_i <= _n_cellsAlongb; n_i++ ){
                 r_i = _ppos(i) - cellwidth * n_i;
-
                 for (int n_k = 0; n_k <= _n_cellsAlongb; n_k++ ){
                     r_k = _ppos(k) - cellwidth * n_k;
-                    //this is needed if we dont want the rods to cross each other to create a strong potential well
-                    if (k == 2){
-                        r_i -= _rodDistance;
-                        if (i == 0) r_k -= _rodDistance;
-                    }
                     r_sq = r_i * r_i + r_k * r_k; //distance to the rods
                     if (r_sq <= _stericrSq + 0.00001){
                         return true;
@@ -1074,6 +1072,8 @@ Matrix3d  CConfiguration::lubricate( const Vector3d & rij ){
                         //     }
                         // If there is overlap between particles, the distance is set to a very small value, according to Brady and Bossis in Phung1996
                         if (rsq <= 0.00001 + _stericrSq){
+                            //TODO del
+                            cout << "Lub-correction\n";
                             rsq = 0.00001 + _stericrSq;
                         }
                         lubPart += lub2p(rn_vec, rsq); // Only this, to avoid problems with different mmax for Long-Range lubrication in lub2p (i.e. Sum3 and Sum4)

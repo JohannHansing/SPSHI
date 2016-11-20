@@ -40,7 +40,7 @@ size_t sizeOfArray( const T(&)[ N ] )
 void createDataFolder(string testcue){
     //NOTE: Maybe I can leave out dt, as soon as I settled on a timestep
     //NOTE: As soon as I create input-list with variables, I must change this function
-    char range[5];
+    char range[10];
     sprintf(range, "%.3f", _modelpar.urange);
     //In the definition of folder, the addition has to START WITH A STRING! for the compiler to know what to do (left to right).
     _files.folder = "sim_data/noreset";
