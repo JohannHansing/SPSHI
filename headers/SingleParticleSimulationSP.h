@@ -48,6 +48,7 @@ void createDataFolder(string testcue){
     if (_triggers.ranRod) _files.folder = _files.folder +  "/ranRod";
     if (_triggers.trueRan) _files.folder = _files.folder +  "/trueRan";
     else if (_triggers.ranSpheres) _files.folder = _files.folder +  "/ranSpheres";
+    if (_triggers.HI2) _files.folder = _files.folder + "/HI2";
     if (!testcue.empty()) _files.folder = _files.folder + "/test" + testcue;
     if (_triggers.noLub) _files.folder = _files.folder +  "/noLub";
     if (_triggers.ranPot) _files.folder = _files.folder + "/ranPot";
@@ -112,6 +113,7 @@ void parameterFile(string testcue){
     parameterFile << "EwaldTest " << _modelpar.EwaldTest << endl;
     parameterFile << "nmax " << _modelpar.nmax << endl;
     parameterFile << "lubcutint " << _modelpar.lubcutint << endl;
+    parameterFile << "HI2 " << _triggers.HI2 << endl;
 
     parameterFile.close();
 }

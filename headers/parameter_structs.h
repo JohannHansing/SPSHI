@@ -32,10 +32,11 @@ struct sim_triggers {
     bool noLub;
     bool includeSteric;  // steric 2
 	bool ranPot;
-	bool hpi;          // hpi exp
+	bool hpi = false;          // hpi exp
     bool ranSpheres;
     bool trueRan;
     bool ranRod;
+    bool HI2;
     string stericType;
 };
 

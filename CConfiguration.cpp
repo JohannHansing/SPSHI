@@ -43,6 +43,7 @@ CConfiguration::CConfiguration( double timestep, model_param_desc modelpar, sim_
     _tracerMM = Matrix3d::Identity();
     _mu_sto = sqrt( 2 * _timestep );                 //timestep for stochastic force
     _hpi = triggers.hpi;
+    _HI2 = triggers.HI2;
     _hpi_u = modelpar.hpi_u;
     _hpi_k = modelpar.hpi_k;
     _binv = 2./_boxsize;//this needs to be 2/b apparently
@@ -592,7 +593,25 @@ void CConfiguration::initPolySpheres(){
             }
         }
     }
-    
+    // THE HI2 one needs to come here for now!
+    //*********** HI2 ************
+    // add spheres according for nmax number of extra adjacent boxes in both directions along one axis
+    if (_HI2){
+        int NpolysphereTmp = _polySpheres.size();
+        for (int nx=-_nmax; nx <= _nmax; nx++){
+            for (int ny=-_nmax; ny <= _nmax; ny++){
+                for (int nz=-_nmax; nz <= _nmax; nz++){
+                    nvec << nx, ny, nz;
+                    if (nvec == Vector3d::Zero()) continue; // Dont add spheres for central box. They're already there
+                    for (unsigned int i = 0; i < NpolysphereTmp; i++){
+                        Vector3d newpos = _polySpheres[i].pos + nvec * _boxsize;
+                        _polySpheres.push_back( CPolySphere( newpos ) );
+                        //cout << "----" << _polySpheres[i].pos << endl;
+                    }
+                }
+            }
+        }
+    }
     // ******** Phillips1990 *********
     // rods are arranged on a 2D square lattice. The rods point into the z-direction. The lattice is in the x-y-plane.
     // I ONLY CHANGE THE zeroPos Vector3d Array!
@@ -715,7 +734,7 @@ void CConfiguration::initConstMobilityMatrix(){
     // on-diagonal elements of mobility matrix: TRACER PARTICLE
     Matrix3d selfmob = realSpcSm( vec_rij, true, _pradius * _pradius ) + reciprocalSpcSm( vec_rij, _pradius * _pradius );
     double self_plus = 1. + _pradius / sqrt (M_PI) * ( - 6. * _alpha + 40. * pow(_alpha,3) * _pradius * _pradius / 3. );
-    if (!_ranRod && !_noEwald) _mobilityMatrix.block<3,3>(0,0) = selfmob + Matrix3d::Identity() * self_plus; // ewaldCorr
+    if (!_ranRod && !_noEwald && !_HI2) _mobilityMatrix.block<3,3>(0,0) = selfmob + Matrix3d::Identity() * self_plus; // ewaldCorr
 
     // now on diagonals for POLYMER SPHERES
     selfmob = realSpcSm( vec_rij, true, asq ) + reciprocalSpcSm( vec_rij, asq );
@@ -731,7 +750,7 @@ void CConfiguration::initConstMobilityMatrix(){
         /*_mobilityMatrix(0,0) = 1;  already taken care of due to identity matrix. The extra F_i0 part in the Ewald sum is only correction to reciprocal sum.
          * I leave out the reciprocal summation for the tracer particle self diff, because it is in only in the simulation box unit cell. */
 
-        if (_ranRod || _noEwald) _mobilityMatrix.block<3,3>(i_count,i_count) = _pradius/_polyrad * Matrix3d::Identity();
+        if (_ranRod || _noEwald || _HI2) _mobilityMatrix.block<3,3>(i_count,i_count) = _pradius/_polyrad * Matrix3d::Identity();
         else _mobilityMatrix.block<3,3>(i_count,i_count) = selfmob;
     }
 
@@ -750,6 +769,7 @@ void CConfiguration::initConstMobilityMatrix(){
          */
             if (_ranRod) muij = RPYamakawaPS(vec_rij, asq);
             else if (_noEwald) muij = RotnePrager( minImage(vec_rij), asq );
+            else if (_HI2) muij = RotnePrager( vec_rij, asq );
             else muij = realSpcSm( vec_rij, false, asq ) + reciprocalSpcSm( vec_rij, asq );
 
             // both lower and upper triangular of symmetric matrix need be filled
@@ -762,7 +782,7 @@ void CConfiguration::initConstMobilityMatrix(){
 }
 
 
-void CConfiguration::calcTracerMobilityMatrix(const bool& full){
+void CConfiguration::calcTracerMobilityMatrix(bool full){
     const double asq = 0.5*(_polyrad * _polyrad + _pradius * _pradius);
 
     // vector for outer product in muij
@@ -770,11 +790,12 @@ void CConfiguration::calcTracerMobilityMatrix(const bool& full){
     double rij_sq;
     Matrix3d lubM = Matrix3d::Zero();
     Matrix3d muij;
+    Matrix3d mobmatrixHI2 = Matrix3d::Identity(); //identity matrix is the self mobility of the tracer
 
 // loop over tracer - particle mobility matrix elements
     for (unsigned int j = 0; j < _N_polyspheres; j++){
         vec_rij = _ppos - _polySpheres[j].pos;
-        if (_noEwald) vec_rij = minImage(vec_rij);
+        if (_noEwald ) vec_rij = minImage(vec_rij);
         //vec_rij = minImage(vec_rij); // tmpminim
         //rij_sq = vec_rij.squaredNorm();
         // if (rij_sq <= (_stericrSq + 0.00001)){ // If there is overlap between particles, the distance is set to a very small value, according to Brady and Bossis in Phung1996
@@ -786,15 +807,20 @@ void CConfiguration::calcTracerMobilityMatrix(const bool& full){
         if (full){
             // Calculation of different particle width Rotne-Prager Ewald sum
             unsigned int j_count = 3 * (j + 1); //  plus 1 is necessary due to omitted tracer particle
-            if (_ranRod || _noEwald) muij = RotnePrager( vec_rij, asq );
+            if (_ranRod || _noEwald || _HI2 ) muij = RotnePrager( vec_rij, asq );
             // TODO Mreci Tracer
             // else muij = realSpcSm( vec_rij, false, asq ) + reciprocalSpcSm( vec_rij, asq );
             else muij = realSpcSm( vec_rij, false, asq ) + reciprocalSpcSmTracer( vec_rij );
 
             _mobilityMatrix.block<3,3>(j_count,0) = muij;
             _mobilityMatrix.block<3,3>(0,j_count) = muij;
+            //TODO delete this if the other HI2 works!
+//             else {
+//                 // This will be excecuted if I use the alternative method of calculating HI without Ewald and without matrix inversion
+//                 mobmatrixHI2 += calcHI2MobMat( vec_rij, asq );
+//             }
         }
-        if (!_noLub ) lubM += lubricate(vec_rij);
+        if (!_noLub )  lubM += lubricate(vec_rij);
     }
     //cout << "############# _mobilityMatrix #########\n" << _mobilityMatrix << endl;
         //cout << "############# lubM #########\n" << lubM << endl;
@@ -804,7 +830,11 @@ void CConfiguration::calcTracerMobilityMatrix(const bool& full){
          _resMNoLub = ConjGradInvert(_mobilityMatrix);
          //_resMNoLub = CholInvertPart(_mobilityMatrix);
     }
+//     else{
+//         _resMNoLub = invert3x3(mobmatrixHI2);
+//     }
     // Add lubrication Part to tracer Resistance Matrix and invert
+//     cout << "-------\n" << _resMNoLub << endl;
     _RMLub = _resMNoLub + lubM;
     _tracerMM = invert3x3(_RMLub);
     //cout << _tracerMM << endl << "........................." << endl;
@@ -858,6 +888,46 @@ void CConfiguration::updateMobilityMatrix(){// ONLY for ranRod, since I dont hav
     }
 }
 
+//----------------------- HI 2 ------------------------
+
+
+// Matrix3d CConfiguration::calcHI2MobMat( Vector3d rij, double asq ){
+//     const int nmax = _nmax;
+//     int maxIter = 2*nmax;
+//     double rsq;
+//     // TODO nmax !!!
+//     Vector3d rn_vec(3);
+//     Matrix3d  addmob = Matrix3d::Zero();
+//     double inverseselfmobpoly = _polyrad/_pradius;
+//     double v1[maxIter+1] , v2[maxIter+1], v3[maxIter+1];
+//     for (int n = 0; n <= maxIter; n++){
+//         v1[n] = (rij(0) + _boxsize * (n-nmax));
+//         v2[n] = (rij(1) + _boxsize * (n-nmax));
+//         v3[n] = (rij(2) + _boxsize * (n-nmax));
+//     }
+//     for (int n1 = 0; n1 <= maxIter; n1++){
+//         rn_vec(0) = v1[n1];
+//         for (int n2 = 0; n2 <= maxIter; n2++){
+//             rn_vec(1) = v2[n2];
+//             for (int n3 = 0; n3 <= maxIter; n3++){
+//                 rn_vec(2) = v3[n3];
+//                 //rsq = rn_vec.squaredNorm();
+//                 //if ( rsq <= r_cutoffsq ){  // for now no r cutoff, since a cutoff is already there through nmax
+//                     //if (rsq <= _stericrSq + 0.000001){ // If there is overlap between particles, the distance is set to a very small value, according to Brady and Bossis in Phung1996
+//                     //    rsq = 0.000001 + _stericrSq;
+//                         //cout << "corrected rsq realSpcSm" << endl;
+//                     //}
+//                     Matrix3d RP = RotnePrager(rn_vec, asq);
+//                     //cout << "====\n" << RP << "\n.\n" << RP*RP << "\n--->\n" << inverseselfmobpoly*RP*RP << endl;
+//                     // the added mobility is the self mobility of the polymer beads times the square of the RP matrix
+//                     addmob -= inverseselfmobpoly*RP*RP;  //TODO so far rsq is also calculated in the RP function. Think about whether this is necessary.
+//                 //}
+//             }
+//         }
+//     }
+//     cout << "addmob:\n" << addmob << endl;
+//     return addmob;
+// }
 
 //----------------------- Ewald sum ------------------------
 
@@ -1004,7 +1074,7 @@ Matrix3d  CConfiguration::reciprocalSpcM(const double& ksq, const Vector3d & kij
 
 //------------------------------------- Rotne-Prager ---------------------------------------
 
-Matrix3d CConfiguration::RotnePrager(const Vector3d & rij, const double & asq) {
+Matrix3d CConfiguration::RotnePrager(Vector3d rij, double asq) {
     // source http://www.fuw.edu.pl/~piotrek/publications/different_sized.pdf.
     Matrix3d  I = Matrix3d::Identity();
     const double rsq = rij.squaredNorm();
@@ -1049,7 +1119,8 @@ Matrix3d  CConfiguration::lubricate( const Vector3d & rij ){
     Vector3d rn_vec(3);
     double rsq;
 //     for (int n1 = -1; n1 <= 1; n1++){
-    if (_ranRod){
+    if (_ranRod || _HI2){
+        // In case of _ranRod or _HI2 do not calculate HI for the neighboring boxes!
         rsq = rij.squaredNorm();
         if (rsq <= 0.00001 + _stericrSq){
             rsq = 0.00001 + _stericrSq;
@@ -1263,25 +1334,26 @@ Matrix3d CConfiguration::Cholesky3x3(const Matrix3d & mat){
     return L;
 }
 
-Matrix3d CConfiguration::invert3x3 (const Matrix3d& A) {
-    //analytical 3x3 matrix inversion - source wikipedia / stackoverflow
-    Matrix3d result;
+Matrix3d CConfiguration::invert3x3 (Matrix3d m) {
+    //analytical 3x3 matrix inversion - source wikipedia / stackoverflow http://stackoverflow.com/questions/983999/simple-3x3-matrix-inverse-code-c
+    double det = m(0, 0) * (m(1, 1) * m(2, 2) - m(2, 1) * m(1, 2)) -
+             m(0, 1) * (m(1, 0) * m(2, 2) - m(1, 2) * m(2, 0)) +
+             m(0, 2) * (m(1, 0) * m(2, 1) - m(1, 1) * m(2, 0));
 
-    double determinant =    +A(0,0)*(A(1,1)*A(2,2)-A(2,1)*A(1,2))
-                            -A(0,1)*(A(1,0)*A(2,2)-A(1,2)*A(2,0))
-                            +A(0,2)*(A(1,0)*A(2,1)-A(1,1)*A(2,0));
-    double invdet = 1/determinant;
-    result(0,0) =  (A(1,1)*A(2,2)-A(2,1)*A(1,2))*invdet;
-    result(0,1) = -(A(0,1)*A(2,2)-A(0,2)*A(2,1))*invdet;
-    result(0,2) =  (A(0,1)*A(1,2)-A(0,2)*A(1,1))*invdet;
-    result(1,0) = -(A(1,0)*A(2,2)-A(1,2)*A(2,0))*invdet;
-    result(1,1) =  (A(0,0)*A(2,2)-A(0,2)*A(2,0))*invdet;
-    result(1,2) = -(A(0,0)*A(1,2)-A(1,0)*A(0,2))*invdet;
-    result(2,0) =  (A(1,0)*A(2,1)-A(2,0)*A(1,1))*invdet;
-    result(2,1) = -(A(0,0)*A(2,1)-A(2,0)*A(0,1))*invdet;
-    result(2,2) =  (A(0,0)*A(1,1)-A(1,0)*A(0,1))*invdet;
+    double invdet = 1 / det;
 
-    return result;
+    Matrix3d minv; // inverse of matrix m
+    minv(0, 0) = (m(1, 1) * m(2, 2) - m(2, 1) * m(1, 2)) * invdet;
+    minv(0, 1) = (m(0, 2) * m(2, 1) - m(0, 1) * m(2, 2)) * invdet;
+    minv(0, 2) = (m(0, 1) * m(1, 2) - m(0, 2) * m(1, 1)) * invdet;
+    minv(1, 0) = (m(1, 2) * m(2, 0) - m(1, 0) * m(2, 2)) * invdet;
+    minv(1, 1) = (m(0, 0) * m(2, 2) - m(0, 2) * m(2, 0)) * invdet;
+    minv(1, 2) = (m(1, 0) * m(0, 2) - m(0, 0) * m(1, 2)) * invdet;
+    minv(2, 0) = (m(1, 0) * m(2, 1) - m(2, 0) * m(1, 1)) * invdet;
+    minv(2, 1) = (m(2, 0) * m(0, 1) - m(0, 0) * m(2, 1)) * invdet;
+    minv(2, 2) = (m(0, 0) * m(1, 1) - m(1, 0) * m(0, 1)) * invdet;
+
+    return minv;
 }
 
 

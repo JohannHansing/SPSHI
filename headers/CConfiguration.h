@@ -33,7 +33,7 @@ class CConfiguration {
     /*Class where all the configuration variables such as potRange etc. and also most functions for the
      * simulation are stored
      */
-private:
+public:
 
     //SCALING
     double _timestep;         //This is the RESCALED timestep! timestep = dt * kT / (frictionCoeffcient * particlesize)
@@ -62,6 +62,7 @@ private:
     bool _noLub;
     bool _ranRod;
     bool _2DLattice;
+    bool _HI2;
 
     //COUNTERS AND INIT VALUES
     int _boxnumberXYZ[3];           //counter to calculate the actual position of the particle
@@ -168,20 +169,21 @@ private:
     Eigen::Matrix3d CholInvertPart (const Eigen::MatrixXd &A);
     Eigen::Matrix3d ConjGradInvert(const Eigen::MatrixXd &A);
     Eigen::Matrix3d Cholesky3x3(const Eigen::Matrix3d &mat);
-    Eigen::Matrix3d invert3x3 (const Eigen::Matrix3d &A);
+    Eigen::Matrix3d invert3x3 (Eigen::Matrix3d m);
 	Eigen::Matrix3d realSpcSm( const Eigen::Vector3d & rij, const bool &self, const double &asq );
         void initMreciprocalTracer();
 	Eigen::Matrix3d reciprocalSpcSmTracer( const Eigen::Vector3d & rij );
 	Eigen::Matrix3d reciprocalSpcSm( const Eigen::Vector3d & rij, const double &asq );
 	Eigen::Matrix3d realSpcM(const double & rsq, const Eigen::Vector3d & rij, const double &asq);
 	Eigen::Matrix3d reciprocalSpcM(const double &ksq, const Eigen::Vector3d & kij,  const double &asq);
-    Eigen::Matrix3d RotnePrager( const Eigen::Vector3d & rij, const double & asq);
+    Eigen::Matrix3d RotnePrager( Eigen::Vector3d rij, double asq);
     Eigen::Matrix3d RPYamakawaPS(const Eigen::Vector3d & rij, const double asq);
+    //Eigen::Matrix3d calcHI2MobMat( Eigen::Vector3d rij, double asq );
 
 	Eigen::Matrix3d lub2p(const Eigen::Vector3d &rij, const double &rsq );
 	Eigen::Matrix3d lubricate( const Eigen::Vector3d & rij );
     Eigen::Vector3d midpointScheme(const Eigen::Vector3d & V0dt,const  Eigen::Vector3d & F);
-    void calcTracerMobilityMatrix(const bool& full);
+    void calcTracerMobilityMatrix(bool full);
     void updateMobilityMatrix();
     void initPolySpheres();
 

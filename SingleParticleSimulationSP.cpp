@@ -29,7 +29,7 @@ int main(int argc, const char* argv[]){
     _triggers.includeSteric = (strcmp(argv[6] , "steric") == 0 || strcmp(argv[6] , "steric2") == 0 || strcmp(argv[6] , "LJ") == 0 || strcmp(argv[6] , "LJ025") == 0) ;
     _triggers.stericType = argv[6];
     _triggers.ranPot = (strcmp(argv[7] , "true") == 0 ) ;
-    _triggers.hpi = (strcmp(argv[8] , "true") == 0 ) ;          // hpi exp
+    _triggers.HI2 = (strcmp(argv[8] , "true") == 0 ) ;          // hpi exp
     int boolpar = 8;
 
     // Checking for correct structure of input arguments
@@ -276,6 +276,11 @@ int main(int argc, const char* argv[]){
                 trajectoryfile << fixed << stepcount * _simpar.timestep << "\t" << ppos[0] << " " << ppos[1] << " " << ppos[2] << endl;
             }
             if (_triggers.recordPosHisto && ((i % 5) == 0)) conf.addHistoValue();
+            
+            //TODO testing
+//             conf._ppos(0) = (i+1)*0.3*_modelpar.boxsize + _modelpar.boxsize/2;
+//             conf._ppos(1) = _modelpar.boxsize/2; conf._ppos(2) = _modelpar.boxsize/2;
+//             if (i==3) return 0;
 
         }
         if ( (l%20 == 0) && _triggers.recordPosHisto ) conf.printHistoMatrix(_files.folder);
