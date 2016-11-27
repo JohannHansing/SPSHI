@@ -888,6 +888,54 @@ void CConfiguration::updateMobilityMatrix(){// ONLY for ranRod, since I dont hav
     }
 }
 
+void CConfiguration::computeMobilityMatrixHere(Eigen::Vector3d rpos){
+    bool lubtmp = _noLub; //store current value for lubrication
+    Vector3d ppostmp = _ppos;
+    _noLub = true;
+    _ppos = rpos;
+    // need only compute if, if there is no overlap
+    if (testOverlap() == false)  calcTracerMobilityMatrix(true); //TODO !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    else _resMNoLub = Matrix3d::Zero();
+    _noLub = lubtmp;
+    _ppos = ppostmp;
+}
+
+void CConfiguration::precomputeResistanceMatrix(Eigen::Vector3d rpos){
+    double xinterval = _frac*_boxsize/_n_cellsAlongb;
+    int nxbins = (int)(0.5/_frac + 0.00001);
+    cout << "nxbins: " << nxbins << endl;
+    _resM_precomp = array<array<array<Eigen::Matrix3d::Zeros(), nxbins>, nxbins>, nxbins>
+    for (int n1 = 0; n1 < nxbins; n1++){
+        rpos(0) = (n1+0.5) * xinterval;
+        for (int n2 = 0; n2 < nxbins; n2++){
+            rpos(1) = (n2+0.5) * xinterval;
+            for (int n3 = 0; n3 < nxbins; n3++){
+                //TODO This loops so far over the whole subcell. Actually, it should be enough to loop over half, like in my sketch, and use the trafo T=[[0,1,0],[1,0,0],[0,0,1]] to swap x and y
+                rpos(2) = (n3+0.5) * xinterval;
+                computeMobilityMatrixHere(rpos);
+                _resM_precomp[n1][n2][n3] = _resMNoLub;
+            }
+        }
+    }
+    // Below is the version that need half as many calculations
+//     Matrix3d Txy = Matrix3d::Zero();
+//     Txy(0,1) = 1; Txy(1,0) = 1; Txy(2,2) = 1;
+//     for (int n1 = 0; n1 < nxbins; n1++){
+//         rpos(0) = (n1+0.5) * xinterval;
+//         for (int n2 = n1; n2 < nxbins; n2++){ //here's the difference
+//             rpos(1) = (n2+0.5) * xinterval;
+//             for (int n3 = 0; n3 < nxbins; n3++){
+//                 rpos(2) = (n3+0.5) * xinterval;
+//                 computeMobilityMatrixHere(rpos);
+//                 _resM_precomp[n1][n2][n3] = _resMNoLub;
+//                 _resM_precomp[n2][n1][n3] = Txy * _resMNoLub * Txy; //right ???
+//             }
+//         }
+//     }
+}
+
+
+
 //----------------------- HI 2 ------------------------
 
 

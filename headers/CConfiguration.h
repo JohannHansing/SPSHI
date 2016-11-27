@@ -139,6 +139,48 @@ public:
     std::vector<double> _fitprrs;
     std::array<double, 20> _minv;
     std::array<double, 20> _m2inv;
+    
+    // parameters for precomputing the long-range resistance matrices
+
+    double _frac = 0.1; //default should be 0.025
+    
+    array<array<array<Eigen::Matrix3d, 2>, 2>, 2> _T_arr;
+    _T_arr[0][0][0] = Eigen::Matrix3d::Identity();
+    _T_arr[1][0][0] = Eigen::Matrix3d::Identity();
+    _T_arr[1][0][0](0,0) = -1;
+    _T_arr[0][1][0] = Eigen::Matrix3d::Identity();
+    _T_arr[0][1][0](1,1) = -1;
+    _T_arr[0][0][1] = Eigen::Matrix3d::Identity();
+    _T_arr[0][0][1](2,2) = -1;
+    _T_arr[1][1][0] = - _T_arr[0][0][1];
+    _T_arr[0][1][1] = - _T_arr[1][0][0];
+    _T_arr[1][0][1] = - _T_arr[0][1][0];
+    _T_arr[1][1][1] = - Eigen::Matrix3d::Identity(); 
+
+    Eigen::Matrix3d getResM(Eigen::Vector3d rpos){
+        // for my tranformations, T is self adjoint, i.e. T^-1 = T
+        int ni[3] = {0,0,0};
+        double bcell = _boxsize/_n_cellsAlongb; //width of the cell (should be 10)
+        Eigen::Vector3d cellpos; //stores the position r of the particle relative to the cell
+        Eigen::Vector3d subcellpos; //stores the position of the tracer in the subcell, to obtain the right mobilty matrix
+        for (int i=0; i<3; i++){
+            cellpos(i) = fmod(rpos(i),bcell); //position of the particle inside the cell
+            subcellpos(i) = cellpos(i); 
+            if (cellpos(i) > bcell/2){
+                ni[i] = 1; //check, in which eigth of the cell the particle resides. This is needed for the transformation
+                subcellpos(i) = abs(subcellpos(i) - bcell);
+            }
+        }
+        ifdebugPreComp(cout << "cellpos\n" << cellpos << "\nsubcellpos\n" << subcellpos;)
+        //find the appropriate index for the stored matrices for the particle position cellpos
+        int x = (int)(subcellpos(0) / (bcell * _frac));
+        int y = (int)(subcellpos(1) / (bcell * _frac));
+        int z = (int)(subcellpos(2) / (bcell * _frac));
+        Eigen::Matrix3d resMT = _resM_precomp[x][y][z]; //get the resistance matrix in that spot
+        Eigen::Matrix3d T = _T_arr[ni[0]][ni[1]][ni[2]];
+        return T * resMT * T;
+    }
+
 
 
     boost::mt19937 *m_igen;                      //generate instance of random number generator "twister".
