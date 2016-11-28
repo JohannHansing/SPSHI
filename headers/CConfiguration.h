@@ -13,6 +13,7 @@
 #include <boost/random.hpp>
 #include <boost/random/normal_distribution.hpp>
 #include <boost/math/special_functions/bessel.hpp>
+#include <boost/filesystem.hpp>
 #include <boost/timer.hpp>
 
 #include <Eigen/Dense>
@@ -28,12 +29,17 @@
 #define ifdebug(x)
 #define iftestEwald(x)   
 #define iftestLub2p(x)
+#define ifdebugPreComp(x)
 
 class CConfiguration {
     /*Class where all the configuration variables such as potRange etc. and also most functions for the
      * simulation are stored
      */
 public:
+    //STRUCT
+    struct sim_triggers _triggers;
+    struct file_desc _files;
+    struct model_param_desc _modelpar;
 
     //SCALING
     double _timestep;         //This is the RESCALED timestep! timestep = dt * kT / (frictionCoeffcient * particlesize)
@@ -63,7 +69,8 @@ public:
     bool _ranRod;
     bool _2DLattice;
     bool _HI2;
-
+    bool _preEwald;
+    
     //COUNTERS AND INIT VALUES
     int _boxnumberXYZ[3];           //counter to calculate the actual position of the particle
     unsigned int _wallcrossings[3]; //counts how many times the particle has crossed the [entry, opposite, side] wall, while
@@ -140,45 +147,107 @@ public:
     std::array<double, 20> _minv;
     std::array<double, 20> _m2inv;
     
-    // parameters for precomputing the long-range resistance matrices
-
-    double _frac = 0.1; //default should be 0.025
     
-    array<array<array<Eigen::Matrix3d, 2>, 2>, 2> _T_arr;
-    _T_arr[0][0][0] = Eigen::Matrix3d::Identity();
-    _T_arr[1][0][0] = Eigen::Matrix3d::Identity();
-    _T_arr[1][0][0](0,0) = -1;
-    _T_arr[0][1][0] = Eigen::Matrix3d::Identity();
-    _T_arr[0][1][0](1,1) = -1;
-    _T_arr[0][0][1] = Eigen::Matrix3d::Identity();
-    _T_arr[0][0][1](2,2) = -1;
-    _T_arr[1][1][0] = - _T_arr[0][0][1];
-    _T_arr[0][1][1] = - _T_arr[1][0][0];
-    _T_arr[1][0][1] = - _T_arr[0][1][0];
-    _T_arr[1][1][1] = - Eigen::Matrix3d::Identity(); 
+    // parameters for precomputing the long-range resistance matrices
+    /*TODO list:
+     * - check memory usage for n_cells > 2, 
+     * - if neccessay, delete mobility matrix after initializing the lookup table, so that less memory is used by the program
+     * - i could potentially make testoverlap much faster for _n_cellsAlongb > 1, if I use the fmod function to reduce the problem to one cell.
+     * - set frac to higher value. size of table for frac = 0.2  is 8*9*25**3 * 10^-6 = 1.125 MB (megabytes), so not so large
+    */
+    double _frac = 0.025; //fraction of the cell width which is used for creating precalculated resistances default should be 0.025
+    unsigned int _nxbins;
+    std::array<std::array<std::array<Eigen::Matrix3d, 2>, 2>, 2> _T_arr;
+    std::vector<std::vector<std::vector<Eigen::Matrix3d>>> _resM_precomp;
+    
+    void initTrafoMatrixes(){
+        _T_arr[0][0][0] = Eigen::Matrix3d::Identity();
+        _T_arr[1][0][0] = Eigen::Matrix3d::Identity();
+        _T_arr[1][0][0](0,0) = -1;
+        _T_arr[0][1][0] = Eigen::Matrix3d::Identity();
+        _T_arr[0][1][0](1,1) = -1;
+        _T_arr[0][0][1] = Eigen::Matrix3d::Identity();
+        _T_arr[0][0][1](2,2) = -1;
+        _T_arr[1][1][0] = - _T_arr[0][0][1];
+        _T_arr[0][1][1] = - _T_arr[1][0][0];
+        _T_arr[1][0][1] = - _T_arr[0][1][0];
+        _T_arr[1][1][1] = - Eigen::Matrix3d::Identity(); 
+    }
 
-    Eigen::Matrix3d getResM(Eigen::Vector3d rpos){
+    Eigen::Matrix3d getTableResM(){
         // for my tranformations, T is self adjoint, i.e. T^-1 = T
         int ni[3] = {0,0,0};
         double bcell = _boxsize/_n_cellsAlongb; //width of the cell (should be 10)
         Eigen::Vector3d cellpos; //stores the position r of the particle relative to the cell
         Eigen::Vector3d subcellpos; //stores the position of the tracer in the subcell, to obtain the right mobilty matrix
         for (int i=0; i<3; i++){
-            cellpos(i) = fmod(rpos(i),bcell); //position of the particle inside the cell
+            cellpos(i) = fmod(_ppos(i),bcell); //position of the particle inside the cell
             subcellpos(i) = cellpos(i); 
-            if (cellpos(i) > bcell/2){
+            if (cellpos(i) >= bcell/2){
                 ni[i] = 1; //check, in which eigth of the cell the particle resides. This is needed for the transformation
-                subcellpos(i) = abs(subcellpos(i) - bcell);
+                if (cellpos(i) == bcell/2) subcellpos(i) = abs(subcellpos(i) - bcell) -0.00001; // this case could otherwise lead to a segmentation fault
+                else subcellpos(i) = abs(subcellpos(i) - bcell);
             }
         }
-        ifdebugPreComp(cout << "cellpos\n" << cellpos << "\nsubcellpos\n" << subcellpos;)
+        ifdebugPreComp(cout << "cellpos\n" << cellpos << "\nsubcellpos\n" << subcellpos << endl;)
         //find the appropriate index for the stored matrices for the particle position cellpos
         int x = (int)(subcellpos(0) / (bcell * _frac));
         int y = (int)(subcellpos(1) / (bcell * _frac));
         int z = (int)(subcellpos(2) / (bcell * _frac));
+        ifdebugPreComp(cout << "x y z:\n" << x << " " << y  << " " << z << "\n ni[]: \n" << ni[0] << " " << ni[1]  << " " << ni[2] << endl;)
         Eigen::Matrix3d resMT = _resM_precomp[x][y][z]; //get the resistance matrix in that spot
         Eigen::Matrix3d T = _T_arr[ni[0]][ni[1]][ni[2]];
+        ifdebugPreComp(cout << "T * resMT * T\n" << T * resMT * T << endl;)
         return T * resMT * T;
+    }
+    
+    void compareTableToEwald(){
+        _noLub = true;
+        Eigen::Matrix3d tmp = getTableResM();
+        calcTracerMobilityMatrix(true);
+        cout << "~~~~~~\nTableResM\n" << tmp << "\nEwaldResM\n" << _resMNoLub << endl;
+        cout << "difference\n" << tmp - _resMNoLub << endl;
+        cout << "relative difference\n" << (tmp - _resMNoLub).cwiseQuotient(_resMNoLub) << endl;
+        cout << "relative to diagonal\n" << (tmp - _resMNoLub)/_resMNoLub(0,0) << endl;
+    }
+    
+    void storeResistanceTable(){
+        cout << "storing precomputed Ewald table to file.." << endl;
+        
+        ofstream resEwaldTable;
+        resEwaldTable.open((_files.ewaldTable ).c_str());
+
+        for (int n1 = 0; n1 < _nxbins; n1++){
+            for (int n2 = 0; n2 < _nxbins; n2++){
+                for (int n3 = 0; n3 < _nxbins; n3++){
+                    for (int i=0; i<3; i++){
+                        resEwaldTable << _resM_precomp[n1][n2][n3](i,0) << " " << _resM_precomp[n1][n2][n3](i,1) << " " << _resM_precomp[n1][n2][n3](i,2) << " ";
+                    }
+                    resEwaldTable << endl;
+                }
+            }
+        }
+        resEwaldTable.close();
+    }
+    
+    void readResistanceMatrixTable(){
+        // source http://stackoverflow.com/questions/3946558/c-read-from-text-file-and-separate-into-variable
+        cout << "ewaldTablefile: " << _files.ewaldTable << endl;
+        
+        ifstream fin(_files.ewaldTable.c_str());
+        _resM_precomp = vector<vector<vector<Eigen::Matrix3d>>> (_nxbins, vector<vector<Eigen::Matrix3d>>(_nxbins, vector<Eigen::Matrix3d>(_nxbins,Eigen::Matrix3d::Zero())));
+        for (int n1 = 0; n1 < _nxbins; n1++){
+            for (int n2 = 0; n2 < _nxbins; n2++){
+                for (int n3 = 0; n3 < _nxbins; n3++){
+                    //getline(inputFile, line);
+                    //istringstream ss(line);
+                    double m11, m12, m13, m21, m22, m23, m31, m32, m33;
+
+                    fin >> m11 >> m12 >> m13 >> m21 >> m22 >> m23 >> m31 >> m32 >> m33;
+                    _resM_precomp[n1][n2][n3] << m11, m12, m13, m21, m22, m23, m31, m32, m33;
+                }
+            }
+        }
     }
 
 
@@ -213,7 +282,7 @@ private:
     Eigen::Matrix3d Cholesky3x3(const Eigen::Matrix3d &mat);
     Eigen::Matrix3d invert3x3 (Eigen::Matrix3d m);
 	Eigen::Matrix3d realSpcSm( const Eigen::Vector3d & rij, const bool &self, const double &asq );
-        void initMreciprocalTracer();
+    void initMreciprocalTracer();
 	Eigen::Matrix3d reciprocalSpcSmTracer( const Eigen::Vector3d & rij );
 	Eigen::Matrix3d reciprocalSpcSm( const Eigen::Vector3d & rij, const double &asq );
 	Eigen::Matrix3d realSpcM(const double & rsq, const Eigen::Vector3d & rij, const double &asq);
@@ -221,11 +290,13 @@ private:
     Eigen::Matrix3d RotnePrager( Eigen::Vector3d rij, double asq);
     Eigen::Matrix3d RPYamakawaPS(const Eigen::Vector3d & rij, const double asq);
     //Eigen::Matrix3d calcHI2MobMat( Eigen::Vector3d rij, double asq );
+    void computeMobilityMatrixHere(Eigen::Vector3d rpos, double xinterval);
+    void precomputeResistanceMatrix();
+
 
 	Eigen::Matrix3d lub2p(const Eigen::Vector3d &rij, const double &rsq );
 	Eigen::Matrix3d lubricate( const Eigen::Vector3d & rij );
     Eigen::Vector3d midpointScheme(const Eigen::Vector3d & V0dt,const  Eigen::Vector3d & F);
-    void calcTracerMobilityMatrix(bool full);
     void updateMobilityMatrix();
     void initPolySpheres();
 
@@ -236,6 +307,15 @@ private:
         ostringstream oss;
         oss << value;
         return oss.str();
+    }
+    
+    unsigned int linecount(string file){
+        std::ifstream f(file.c_str());
+        std::string line;
+        unsigned int i;
+        for (i = 0; std::getline(f, line); ++i)
+            ;
+        return i;
     }
 
 
@@ -263,13 +343,15 @@ public:
   //  double getDisplacement();
     unsigned int getwallcrossings(int i){ return _wallcrossings[i]; }
     bool checkFirstPassage(double mfpPos, int dim);
-    bool testOverlap();
+    bool testOverlap(double stericrSq_preE=0);
     void moveBack();
     void initPosHisto();
     void addHistoValue();
     void printHistoMatrix(string folder);
     void checkDisplacementforMM();
     string getTestCue(){ return _testcue; };
+    void calcTracerMobilityMatrix(bool full);
+
 
 
     double _binv;

@@ -29,7 +29,7 @@ int main(int argc, const char* argv[]){
     _triggers.includeSteric = (strcmp(argv[6] , "steric") == 0 || strcmp(argv[6] , "steric2") == 0 || strcmp(argv[6] , "LJ") == 0 || strcmp(argv[6] , "LJ025") == 0) ;
     _triggers.stericType = argv[6];
     _triggers.ranPot = (strcmp(argv[7] , "true") == 0 ) ;
-    _triggers.HI2 = (strcmp(argv[8] , "true") == 0 ) ;          // hpi exp
+    _triggers.preEwald = (strcmp(argv[8] , "true") == 0 ) ;          // hpi exp
     int boolpar = 8;
 
     // Checking for correct structure of input arguments
@@ -197,7 +197,8 @@ int main(int argc, const char* argv[]){
             // calc HI mobility matrix here, since it needs to be defined for random force normalisation
 
             if (HI){ // Calculate displacement and update mobilityMatrix if it is larger than 0.1*tracer Radius
-                conf.checkDisplacementforMM();
+                if (!_triggers.preEwald) conf.checkDisplacementforMM();
+                else conf.calcTracerMobilityMatrix(false); //It is IMPORTANT that this is false. Otherwise There will be errors!
             }
 
             conf.calcStochasticForces();

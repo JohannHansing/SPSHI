@@ -17,6 +17,9 @@ CConfiguration::CConfiguration( double timestep, model_param_desc modelpar, sim_
     // seed = 0:  use time, else any integer
     // init random number generator
     setRanNumberGen(0);
+    _triggers = triggers;
+    _files = files;
+    _modelpar = modelpar;
     _potRange = modelpar.urange;
     _potStrength = modelpar.ustrength;
     _pradius = modelpar.particlesize/2;   //_pradius is now the actual radius of the particle. hence, I need to change the definition of the LJ potential to include (_pradius +_polyrad)   -  or maybe leave LJ pot out
@@ -43,7 +46,7 @@ CConfiguration::CConfiguration( double timestep, model_param_desc modelpar, sim_
     _tracerMM = Matrix3d::Identity();
     _mu_sto = sqrt( 2 * _timestep );                 //timestep for stochastic force
     _hpi = triggers.hpi;
-    _HI2 = triggers.HI2;
+    _HI2 = false;
     _hpi_u = modelpar.hpi_u;
     _hpi_k = modelpar.hpi_k;
     _binv = 2./_boxsize;//this needs to be 2/b apparently
@@ -122,6 +125,23 @@ CConfiguration::CConfiguration( double timestep, model_param_desc modelpar, sim_
  //    }
     iftestEwald(testRealSpcM(); testEwald(); )
     iftestLub2p(testLub2p();)
+    
+    if (_triggers.preEwald==true){
+        _nxbins = (int)(0.5/_frac + 0.00001);
+        cout << "precompute Resistance Matrix for nxbins = " << _nxbins << endl;
+        initTrafoMatrixes();
+        _files.ewaldTable = "ewaldTables/ewaldTable_a" + toString(_modelpar.polymersize) + "p" + toString(_modelpar.particlesize) 
+                + "b" + toString(_modelpar.boxsize) + "nc" + toString(_modelpar.n_cells) + "nmax" +  toString(_modelpar.nmax) + "frac" + toString(_frac) + ".txt";
+
+        if ( boost::filesystem::exists( _files.ewaldTable.c_str() ) && (linecount( _files.ewaldTable ) == pow(_nxbins,3)) ){
+            cout << "ewaldTable found .. reading entries from file." << endl;
+            readResistanceMatrixTable();
+        }
+        else{
+            boost::filesystem::create_directory("ewaldTables");
+            precomputeResistanceMatrix();
+        }
+    }
 
 }
 
@@ -139,8 +159,13 @@ void CConfiguration::checkDisplacementforMM(){
     for (int i=0; i<3; i++){
         movedsq += pow(_ppos(i) + _boxsize *  _boxnumberXYZ[i] - _lastcheck[i] , 2);
     }
-    if ( movedsq > _cutoffMMsq ){
+    if ((!_triggers.preEwald) && movedsq > _cutoffMMsq ){
+//         Matrix3d tmp = _resMNoLub;
         calcTracerMobilityMatrix(true);
+//         cout << "~~~~~~\nTableResM\n" << tmp << "\nEwaldResM\n" << _resMNoLub << endl;
+//         cout << "difference\n" << tmp - _resMNoLub << endl;
+//         cout << "relative difference\n" << (tmp - _resMNoLub).cwiseQuotient(_resMNoLub) << endl;
+//         cout << "relative to diagonal\n" << (tmp - _resMNoLub)/_resMNoLub(0,0) << endl;
         // new start point for displacement check
         _lastcheck[0] = _ppos(0) + _boxsize *  _boxnumberXYZ[0];
         _lastcheck[1] = _ppos(1) + _boxsize *  _boxnumberXYZ[1];
@@ -183,6 +208,7 @@ Vector3d CConfiguration::midpointScheme(const Vector3d & V0dt, const Vector3d & 
 int CConfiguration::makeStep(){
     //move the particle according to the forces and record trajectory like watched by outsider
 //  if (_HI){
+    ifdebugPreComp(compareTableToEwald();)
     _Vdriftdt = Vector3d::Zero();
 
     _prevpos = _ppos;
@@ -238,6 +264,7 @@ void CConfiguration::report(string reason){
     cout << "_resMNoLub:\n" << _resMNoLub << endl;
     cout << "_RMLub\n" << _RMLub << endl;
     cout << "Cholesky3x3(_RMLub)\n" << Cholesky3x3(_RMLub) << endl;
+    if (_resMNoLub(0,0) == 0) cout << "NOTE: _resMNoLub(0,0) == 0 !\nThere was probably a problem with the lookup table for the precomputed Ewald" << endl;
     //overlapreport();
     //testIfSpheresAreOnRods();
 }
@@ -506,7 +533,7 @@ void CConfiguration::modifyPot(double& U, double& Fr,const double dist){
 
 //****************************STERIC HINDRANCE****************************************************//
 
-bool CConfiguration::testOverlap(){
+bool CConfiguration::testOverlap(double stericrSq_preE){
     //Function to check, whether the diffusing particle of size psize is overlapping with any one of the rods (edges of the box)
     //mostly borrowed from moveParticleAndWatch()
 
@@ -542,6 +569,28 @@ bool CConfiguration::testOverlap(){
     double r_i = 0, r_k = 0;
     double r_sq = 0;
     double cellwidth = _boxsize/_n_cellsAlongb;
+    
+    if (stericrSq_preE != 0){        
+        Eigen::Vector3d cellpos; //stores the position r of the particle relative to the cell
+        for (int i=0; i<3; i++){
+            cellpos(i) = fmod(_ppos(i),cellwidth); //position of the particle inside the cell
+        }
+        for (int i = 0; i < 2; i++){
+            for (int k = i+1; k < 3; k++){
+                for (int n_i = 0; n_i <= 1; n_i++ ){
+                    r_i = _ppos(i) - cellwidth * n_i;
+                    for (int n_k = 0; n_k <= 1; n_k++ ){
+                        r_k = _ppos(k) - cellwidth * n_k;
+                        r_sq = r_i * r_i + r_k * r_k; //distance to the rods
+                        if (r_sq <= stericrSq_preE + 0.00001){
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        return false;
+    }
 
     for (int i = 0; i < 2; i++){
         for (int k = i+1; k < 3; k++){
@@ -596,22 +645,22 @@ void CConfiguration::initPolySpheres(){
     // THE HI2 one needs to come here for now!
     //*********** HI2 ************
     // add spheres according for nmax number of extra adjacent boxes in both directions along one axis
-    if (_HI2){
-        int NpolysphereTmp = _polySpheres.size();
-        for (int nx=-_nmax; nx <= _nmax; nx++){
-            for (int ny=-_nmax; ny <= _nmax; ny++){
-                for (int nz=-_nmax; nz <= _nmax; nz++){
-                    nvec << nx, ny, nz;
-                    if (nvec == Vector3d::Zero()) continue; // Dont add spheres for central box. They're already there
-                    for (unsigned int i = 0; i < NpolysphereTmp; i++){
-                        Vector3d newpos = _polySpheres[i].pos + nvec * _boxsize;
-                        _polySpheres.push_back( CPolySphere( newpos ) );
-                        //cout << "----" << _polySpheres[i].pos << endl;
-                    }
-                }
-            }
-        }
-    }
+//     if (_HI2){
+//         int NpolysphereTmp = _polySpheres.size();
+//         for (int nx=-_nmax; nx <= _nmax; nx++){
+//             for (int ny=-_nmax; ny <= _nmax; ny++){
+//                 for (int nz=-_nmax; nz <= _nmax; nz++){
+//                     nvec << nx, ny, nz;
+//                     if (nvec == Vector3d::Zero()) continue; // Dont add spheres for central box. They're already there
+//                     for (unsigned int i = 0; i < NpolysphereTmp; i++){
+//                         Vector3d newpos = _polySpheres[i].pos + nvec * _boxsize;
+//                         _polySpheres.push_back( CPolySphere( newpos ) );
+//                         //cout << "----" << _polySpheres[i].pos << endl;
+//                     }
+//                 }
+//             }
+//         }
+//     }
     // ******** Phillips1990 *********
     // rods are arranged on a 2D square lattice. The rods point into the z-direction. The lattice is in the x-y-plane.
     // I ONLY CHANGE THE zeroPos Vector3d Array!
@@ -790,7 +839,10 @@ void CConfiguration::calcTracerMobilityMatrix(bool full){
     double rij_sq;
     Matrix3d lubM = Matrix3d::Zero();
     Matrix3d muij;
-    Matrix3d mobmatrixHI2 = Matrix3d::Identity(); //identity matrix is the self mobility of the tracer
+    //Matrix3d mobmatrixHI2 = Matrix3d::Identity(); //identity matrix is the self mobility of the tracer
+    
+    // full is always disabled if the precomputes Resistance Matrix is used!
+    if (_triggers.preEwald && !full) _resMNoLub = getTableResM();
 
 // loop over tracer - particle mobility matrix elements
     for (unsigned int j = 0; j < _N_polyspheres; j++){
@@ -804,7 +856,7 @@ void CConfiguration::calcTracerMobilityMatrix(bool full){
         //     vec_rij *= corr;
         // }
 
-        if (full){
+        if (full){ // when _triggers.preEwald is true, full will always be false
             // Calculation of different particle width Rotne-Prager Ewald sum
             unsigned int j_count = 3 * (j + 1); //  plus 1 is necessary due to omitted tracer particle
             if (_ranRod || _noEwald || _HI2 ) muij = RotnePrager( vec_rij, asq );
@@ -888,50 +940,61 @@ void CConfiguration::updateMobilityMatrix(){// ONLY for ranRod, since I dont hav
     }
 }
 
-void CConfiguration::computeMobilityMatrixHere(Eigen::Vector3d rpos){
+void CConfiguration::computeMobilityMatrixHere(Eigen::Vector3d rpos, double xinterval){
     bool lubtmp = _noLub; //store current value for lubrication
     Vector3d ppostmp = _ppos;
     _noLub = true;
     _ppos = rpos;
+    
     // need only compute if, if there is no overlap
-    if (testOverlap() == false)  calcTracerMobilityMatrix(true); //TODO !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    else _resMNoLub = Matrix3d::Zero();
+    if (_pradius + _polyrad > 2*xinterval){ // only do the testoverlap condition, if the steric interaction radius is significantly bigger than the xinterval
+        if (testOverlap(pow(_pradius + _polyrad - 2*xinterval, 2)) == false)  calcTracerMobilityMatrix(true); 
+        else _resMNoLub = Matrix3d::Zero();
+    }
+    else  calcTracerMobilityMatrix(true);
+    //reset _ppos and _noLub trigger
     _noLub = lubtmp;
     _ppos = ppostmp;
 }
 
-void CConfiguration::precomputeResistanceMatrix(Eigen::Vector3d rpos){
+void CConfiguration::precomputeResistanceMatrix(){
     double xinterval = _frac*_boxsize/_n_cellsAlongb;
-    int nxbins = (int)(0.5/_frac + 0.00001);
-    cout << "nxbins: " << nxbins << endl;
-    _resM_precomp = array<array<array<Eigen::Matrix3d::Zeros(), nxbins>, nxbins>, nxbins>
-    for (int n1 = 0; n1 < nxbins; n1++){
-        rpos(0) = (n1+0.5) * xinterval;
-        for (int n2 = 0; n2 < nxbins; n2++){
-            rpos(1) = (n2+0.5) * xinterval;
-            for (int n3 = 0; n3 < nxbins; n3++){
-                //TODO This loops so far over the whole subcell. Actually, it should be enough to loop over half, like in my sketch, and use the trafo T=[[0,1,0],[1,0,0],[0,0,1]] to swap x and y
-                rpos(2) = (n3+0.5) * xinterval;
-                computeMobilityMatrixHere(rpos);
-                _resM_precomp[n1][n2][n3] = _resMNoLub;
-            }
-        }
-    }
-    // Below is the version that need half as many calculations
-//     Matrix3d Txy = Matrix3d::Zero();
-//     Txy(0,1) = 1; Txy(1,0) = 1; Txy(2,2) = 1;
-//     for (int n1 = 0; n1 < nxbins; n1++){
+    Vector3d rpos;
+    _resM_precomp = vector<vector<vector<Eigen::Matrix3d>>> (_nxbins, vector<vector<Eigen::Matrix3d>>(_nxbins, vector<Eigen::Matrix3d>(_nxbins,Eigen::Matrix3d::Zero())));
+    
+    Matrix3d Txy = Matrix3d::Zero();
+    Txy(0,1) = 1; Txy(1,0) = 1; Txy(2,2) = 1;
+    
+//     for (int n1 = 0; n1 < _nxbins; n1++){
 //         rpos(0) = (n1+0.5) * xinterval;
-//         for (int n2 = n1; n2 < nxbins; n2++){ //here's the difference
+//         cout << "n1=" << n1 << " .. ";
+//         for (int n2 = 0; n2 < _nxbins; n2++){
 //             rpos(1) = (n2+0.5) * xinterval;
-//             for (int n3 = 0; n3 < nxbins; n3++){
+//             for (int n3 = 0; n3 < _nxbins; n3++){
+//                 //TODO This loops so far over the whole subcell. Actually, it should be enough to loop over half, like in my sketch, and use the trafo T=[[0,1,0],[1,0,0],[0,0,1]] to swap x and y
 //                 rpos(2) = (n3+0.5) * xinterval;
-//                 computeMobilityMatrixHere(rpos);
+//                 computeMobilityMatrixHere(rpos,xinterval);
 //                 _resM_precomp[n1][n2][n3] = _resMNoLub;
-//                 _resM_precomp[n2][n1][n3] = Txy * _resMNoLub * Txy; //right ???
+//                 //if (n1 > n2) cout << "++++++++++++\nTxy * _resMNoLub * Txy - _resM_precomp[n2][n1][n3]\n" << Txy * _resMNoLub * Txy - _resM_precomp[n2][n1][n3] << endl;
 //             }
 //         }
 //     }
+    // Below is the version that need half as many calculations
+    for (int n1 = 0; n1 < _nxbins; n1++){
+        rpos(0) = (n1+0.5) * xinterval;
+        cout << "n1=" << n1 << " .. ";
+        for (int n2 = n1; n2 < _nxbins; n2++){ //here's the difference
+            rpos(1) = (n2+0.5) * xinterval;
+            for (int n3 = 0; n3 < _nxbins; n3++){
+                rpos(2) = (n3+0.5) * xinterval;
+                computeMobilityMatrixHere(rpos,xinterval);
+                _resM_precomp[n1][n2][n3] = _resMNoLub;
+                _resM_precomp[n2][n1][n3] = Txy * _resMNoLub * Txy;
+            }
+        }
+    }
+    cout << endl;
+    storeResistanceTable();
 }
 
 

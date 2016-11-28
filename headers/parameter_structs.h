@@ -36,13 +36,14 @@ struct sim_triggers {
     bool ranSpheres;
     bool trueRan;
     bool ranRod;
-    bool HI2;
+    bool preEwald;
     string stericType;
 };
 
 struct file_desc {
     // TODO MAYBE
     string folder;
+    string ewaldTable; // This parameter is assigned only in CConfiguration
 };
 
 
