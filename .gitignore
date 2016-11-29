@@ -18,3 +18,4 @@ tmp_pls delete/
 ._*
 headers/._*
 __*
+*.save

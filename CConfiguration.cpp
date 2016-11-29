@@ -74,7 +74,11 @@ CConfiguration::CConfiguration( double timestep, model_param_desc modelpar, sim_
 
     // lubrication stuff
     initLubStuff(modelpar.particlesize,modelpar.polymersize);
-    _cutofflubSq = pow(modelpar.lubcutint*(_polyrad + _pradius),2);
+    double lubweight = 1. / (1 + abs(_polyrad - _pradius)/(_polyrad + _pradius)); //this is between 1 and 0.5
+    double bcell = _boxsize/_n_cellsAlongb;
+    //old version _cutofflubSq = pow(lubweight*modelpar.lubcutint*(_polyrad + _pradius),2);
+    _cutofflubSq = pow(_pradius*lubweight + bcell, 2); //this version accounts for the symmetry of  the system
+    if (_EwaldTest != 0 || _ranSpheres)  _cutofflubSq = pow(lubweight*modelpar.lubcutint*(_polyrad + _pradius),2); // old version
     _stericrSq = pow(_pradius + _polyrad, 2);
 
 
