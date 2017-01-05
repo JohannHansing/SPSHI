@@ -137,7 +137,7 @@ CConfiguration::CConfiguration( double timestep, model_param_desc modelpar, sim_
         _files.ewaldTable = "ewaldTables/ewaldTable_a" + toString(_modelpar.polymersize) + "p" + toString(_modelpar.particlesize) 
                 + "b" + toString(_modelpar.boxsize) + "nc" + toString(_modelpar.n_cells) + "nmax" +  toString(_modelpar.nmax) + "frac" + toString(_frac) + ".txt";
 
-        if ( boost::filesystem::exists( _files.ewaldTable.c_str() ) && (linecount( _files.ewaldTable ) == pow(_nxbins,3)) ){
+        if (false && boost::filesystem::exists( _files.ewaldTable.c_str() ) && (linecount( _files.ewaldTable ) == pow(_nxbins,3)) ){
             cout << "ewaldTable found .. reading entries from file." << endl;
             readResistanceMatrixTable();
         }
@@ -883,8 +883,8 @@ void CConfiguration::calcTracerMobilityMatrix(bool full){
 
     // create resistance matrix - Some elements remain constant throughout the simulation. Those are stored here.
     if (full){
-         _resMNoLub = ConjGradInvert(_mobilityMatrix);
-         //_resMNoLub = CholInvertPart(_mobilityMatrix);
+         //_resMNoLub = ConjGradInvert(_mobilityMatrix);
+        _resMNoLub = CholInvertPart(_mobilityMatrix);
     }
 //     else{
 //         _resMNoLub = invert3x3(mobmatrixHI2);
@@ -992,8 +992,16 @@ void CConfiguration::precomputeResistanceMatrix(){
             for (int n3 = 0; n3 < _nxbins; n3++){
                 rpos(2) = (n3+0.5) * xinterval;
                 computeMobilityMatrixHere(rpos,xinterval);
+                // next bit of code from http://stackoverflow.com/questions/16283000/most-efficient-way-to-loop-through-an-eigen-matrix
+                // for (size_t i = 0, nRows = _resMNoLub.rows(), nCols = _resMNoLub.cols(); i < nCols; ++i)
+//                   for (size_t j = 0; j < nRows; ++j){
+//                       // round all elements down to avoid numerical errors which make the matrix non-positive definite
+//                       _resMNoLub(i,j) = floor(_resMNoLub(i,j) * 1000 ) * 0.001;
+//                       //cout << _resMNoLub(i,j) << endl;
+//                   }
                 _resM_precomp[n1][n2][n3] = _resMNoLub;
                 _resM_precomp[n2][n1][n3] = Txy * _resMNoLub * Txy;
+                
             }
         }
     }
@@ -1411,7 +1419,7 @@ Matrix3d CConfiguration::lub2p(const Vector3d &rij, const double &rsq){
 Matrix3d CConfiguration::ConjGradInvert(const MatrixXd &A){
     MatrixXd I = MatrixXd::Identity(A.rows(),3);
     ConjugateGradient<MatrixXd, Lower|Upper > cg;
-    cg.setTolerance( 0.00001 );
+    cg.setTolerance( 0.0001 );
     cg.compute(A);
     _prevCG = cg.solveWithGuess(I,_prevCG);
     //_prevCG = x;//temp. make this _prevCG = cg.solveWithGuess(I,_prevCG);
