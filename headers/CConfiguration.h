@@ -847,6 +847,17 @@ public:
         cout <<"\n==========\n\n" << endl;
         //abort();
     }
+    
+    void writePolySpheres(string directory){
+        // this function writes the polyspheres positions to a file. This is only used for ranSpheres
+        ofstream polyPos;
+        polyPos.open((directory + "/Coordinates/polySpherepos.txt" ).c_str());
+
+        for (unsigned int j = 0; j < _N_polyspheres; j++){
+            polyPos << _polySpheres[j].pos(0) << " " << _polySpheres[j].pos(1) << " " << _polySpheres[j].pos(2) << " " << endl;
+        }
+        polyPos.close();
+    }
 
 
 };

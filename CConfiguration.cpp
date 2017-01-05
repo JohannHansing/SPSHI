@@ -1263,8 +1263,6 @@ Matrix3d  CConfiguration::lubricate( const Vector3d & rij ){
                         //     }
                         // If there is overlap between particles, the distance is set to a very small value, according to Brady and Bossis in Phung1996
                         if (rsq <= 0.00001 + _stericrSq){
-                            //TODO del
-                            cout << "Lub-correction\n";
                             rsq = 0.00001 + _stericrSq;
                         }
                         lubPart += lub2p(rn_vec, rsq); // Only this, to avoid problems with different mmax for Long-Range lubrication in lub2p (i.e. Sum3 and Sum4)

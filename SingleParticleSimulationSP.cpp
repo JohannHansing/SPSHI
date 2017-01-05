@@ -135,6 +135,7 @@ int main(int argc, const char* argv[]){
     //Create data folders and print location as string to string "folder"
     //TODO struct createDataFolder does not return a folder anymore
     createDataFolder(conf.getTestCue());
+    if (_triggers.ranSpheres) conf.writePolySpheres(_files.folder);
 
 
     //initialize averages
