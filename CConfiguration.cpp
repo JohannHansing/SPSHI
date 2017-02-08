@@ -61,6 +61,8 @@ CConfiguration::CConfiguration( double timestep, model_param_desc modelpar, sim_
         _prevpos(i) = _resetpos;
         _lastcheck[i] = _startpos(i);
     }
+    
+    //_ppos << 3.625, 4.375, 4.875;
 
 
 
@@ -77,7 +79,7 @@ CConfiguration::CConfiguration( double timestep, model_param_desc modelpar, sim_
     double lubweight = 1. / (1 + abs(_polyrad - _pradius)/(_polyrad + _pradius)); //this is between 1 and 0.5
     double bcell = _boxsize/_n_cellsAlongb;
     //old version _cutofflubSq = pow(lubweight*modelpar.lubcutint*(_polyrad + _pradius),2);
-    _cutofflubSq = pow(_pradius*lubweight + bcell, 2); //this version accounts for the symmetry of  the system
+    _cutofflubSq = pow(_polyrad*2*lubweight + bcell, 2); //this version accounts for the symmetry of  the system
     if (_EwaldTest != 0 || _ranSpheres)  _cutofflubSq = pow(lubweight*modelpar.lubcutint*(_polyrad + _pradius),2); // old version
     _stericrSq = pow(_pradius + _polyrad, 2);
 
@@ -103,6 +105,7 @@ CConfiguration::CConfiguration( double timestep, model_param_desc modelpar, sim_
     // THIS NEEDS TO COME LAST !!!!!!!
         initConstMobilityMatrix();
         calcTracerMobilityMatrix(true);
+        cout << "$$$$$$$$$$$$$$$$$$$$$$$$\n\n\n$$$$$$$$$$$" << endl;
     //_pbc_corr = 1 - 1/(_N_polyspheres+1); // assign system size dependent value to pbc correction for tracer displacement in porous medium
     }
 
@@ -137,7 +140,7 @@ CConfiguration::CConfiguration( double timestep, model_param_desc modelpar, sim_
         _files.ewaldTable = "ewaldTables/ewaldTable_a" + toString(_modelpar.polymersize) + "p" + toString(_modelpar.particlesize) 
                 + "b" + toString(_modelpar.boxsize) + "nc" + toString(_modelpar.n_cells) + "nmax" +  toString(_modelpar.nmax) + "frac" + toString(_frac) + ".txt";
 
-        if (false && boost::filesystem::exists( _files.ewaldTable.c_str() ) && (linecount( _files.ewaldTable ) == pow(_nxbins,3)) ){
+        if (boost::filesystem::exists( _files.ewaldTable.c_str() ) && (linecount( _files.ewaldTable ) == pow(_nxbins,3)) ){
             cout << "ewaldTable found .. reading entries from file." << endl;
             readResistanceMatrixTable();
         }
@@ -883,8 +886,29 @@ void CConfiguration::calcTracerMobilityMatrix(bool full){
 
     // create resistance matrix - Some elements remain constant throughout the simulation. Those are stored here.
     if (full){
-         //_resMNoLub = ConjGradInvert(_mobilityMatrix);
-        _resMNoLub = CholInvertPart(_mobilityMatrix);
+        _resMNoLub = ConjGradInvert(_mobilityMatrix);
+        //_resMNoLub = CholInvertPart(_mobilityMatrix);
+        if (_triggers.preEwald){
+            Matrix3d tmpchol = Cholesky3x3(_resMNoLub);
+            _nanfound=false;
+            for (size_t i = 0; i < 3; i++){
+               for (size_t j = 0; j < 3; j++){
+                   // look for nans
+                   if ( std::isnan(tmpchol(i,j)) ){
+                       cout << "\n-------        Error: NaN found     ------------" << endl;
+                       cout << "--> ppos:\n" << _ppos << endl;
+                       cout << "_resMNoLub:\n" << _resMNoLub << endl;
+                       _nanfound=true;
+                       _nancount += 1;
+                       // This approximates the mobility matrix at a certain position with a neighboring value if there is problems with the numerical solution
+                       _resMNoLub = _resMPrev;
+                       //abort();
+                       break;
+                   }
+               }
+               if (_nanfound) break;
+            }
+        }
     }
 //     else{
 //         _resMNoLub = invert3x3(mobmatrixHI2);
@@ -949,13 +973,30 @@ void CConfiguration::computeMobilityMatrixHere(Eigen::Vector3d rpos, double xint
     Vector3d ppostmp = _ppos;
     _noLub = true;
     _ppos = rpos;
+    _nanfound=false;
+    double ptmp = _pradius;
     
     // need only compute if, if there is no overlap
-    if (_pradius + _polyrad > 2*xinterval){ // only do the testoverlap condition, if the steric interaction radius is significantly bigger than the xinterval
+    if (_pradius + _polyrad > 4*xinterval){ // only do the testoverlap condition, if the steric interaction radius is significantly bigger than the xinterval
         if (testOverlap(pow(_pradius + _polyrad - 2*xinterval, 2)) == false)  calcTracerMobilityMatrix(true); 
         else _resMNoLub = Matrix3d::Zero();
     }
     else  calcTracerMobilityMatrix(true);
+    // stash zwischenergebnis to avoid errors due to NaNs. This is an approximation
+    if (_resMNoLub(0,0) != 0) _resMPrev = _resMNoLub;
+    // while (_nanfound==true){
+//         Vector3d tmpv;
+//         //_pradius+=0.001;
+//         tmpv << zerotoone()-0.5,zerotoone()-0.5,zerotoone()-0.5;
+//         _ppos+=tmpv*0.001;
+//         cout << "_pradius, _polyrad" << _pradius << "   " << _polyrad << endl;
+//         cout << "testOverlap(pow(_pradius + _polyrad - 2*xinterval, 2))  : " << testOverlap(pow(_pradius + _polyrad - 2*xinterval, 2)) << endl;
+//         cout << "rpos " << rpos << endl;
+//         cout << "new ppos:\n" << _ppos << endl;
+//         calcTracerMobilityMatrix(true);
+//     }
+    _pradius=ptmp;
+    _nanfound=false;
     //reset _ppos and _noLub trigger
     _noLub = lubtmp;
     _ppos = ppostmp;
@@ -992,20 +1033,13 @@ void CConfiguration::precomputeResistanceMatrix(){
             for (int n3 = 0; n3 < _nxbins; n3++){
                 rpos(2) = (n3+0.5) * xinterval;
                 computeMobilityMatrixHere(rpos,xinterval);
-                // next bit of code from http://stackoverflow.com/questions/16283000/most-efficient-way-to-loop-through-an-eigen-matrix
-                // for (size_t i = 0, nRows = _resMNoLub.rows(), nCols = _resMNoLub.cols(); i < nCols; ++i)
-//                   for (size_t j = 0; j < nRows; ++j){
-//                       // round all elements down to avoid numerical errors which make the matrix non-positive definite
-//                       _resMNoLub(i,j) = floor(_resMNoLub(i,j) * 1000 ) * 0.001;
-//                       //cout << _resMNoLub(i,j) << endl;
-//                   }
                 _resM_precomp[n1][n2][n3] = _resMNoLub;
                 _resM_precomp[n2][n1][n3] = Txy * _resMNoLub * Txy;
-                
             }
         }
     }
     cout << endl;
+    cout << "NUMBER OF NANS: " << _nancount << endl;
     storeResistanceTable();
 }
 
@@ -1417,7 +1451,7 @@ Matrix3d CConfiguration::lub2p(const Vector3d &rij, const double &rsq){
 Matrix3d CConfiguration::ConjGradInvert(const MatrixXd &A){
     MatrixXd I = MatrixXd::Identity(A.rows(),3);
     ConjugateGradient<MatrixXd, Lower|Upper > cg;
-    cg.setTolerance( 0.0001 );
+    cg.setTolerance( 0.00001 );
     cg.compute(A);
     _prevCG = cg.solveWithGuess(I,_prevCG);
     //_prevCG = x;//temp. make this _prevCG = cg.solveWithGuess(I,_prevCG);

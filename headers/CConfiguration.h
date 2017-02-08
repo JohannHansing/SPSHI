@@ -71,6 +71,11 @@ public:
     bool _HI2;
     bool _preEwald;
     
+    //nan-Stuff
+    bool _nanfound=false;
+    int _nancount = 0;
+    Eigen::Matrix3d _resMPrev = Eigen::Matrix3d::Identity();
+    
     //COUNTERS AND INIT VALUES
     int _boxnumberXYZ[3];           //counter to calculate the actual position of the particle
     unsigned int _wallcrossings[3]; //counts how many times the particle has crossed the [entry, opposite, side] wall, while
