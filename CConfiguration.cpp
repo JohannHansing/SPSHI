@@ -424,19 +424,17 @@ void CConfiguration::calcMobilityForces(){
 void CConfiguration::calcMobForcesBeads(){
     //reset mobility forces to zero
     _f_mob = Vector3d::Zero();
-    // Calc mobility forces for EwaldTest==1 case of one sphere per cell
-    if (_EwaldTest==1){
-        Vector3d vrij;
-        Vector3d Fr=Vector3d::Zero();
-        double U = 0;
-        for (unsigned int j = 0; j < _N_polyspheres; j++){
-            vrij = minImage(_ppos - _polySpheres[j].pos);
-            double rij = vrij.norm();
-            U+=_potStrength * exp(-1 * rij / _potRange);
-            Fr+=U / (_potRange * rij) * vrij;
-        }
-        _f_mob += Fr;
+    //calc mobility forces between the tracer and all monomer beads
+    Vector3d vrij;
+    Vector3d Fr=Vector3d::Zero();
+    double U = 0;
+    for (unsigned int j = 0; j < _N_polyspheres; j++){
+        vrij = minImage(_ppos - _polySpheres[j].pos);
+        double rij = vrij.norm();
+        U+=_potStrength * exp(-1 * rij / _potRange);
+        Fr+=U / (_potRange * rij) * vrij;
     }
+    _f_mob += Fr;
 }
 
 
