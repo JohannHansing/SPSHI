@@ -28,7 +28,7 @@ int main(int argc, const char* argv[]){
     _triggers.noLub = (strcmp(argv[5] , "true") == 0 ) ;
     _triggers.includeSteric = (strcmp(argv[6] , "steric") == 0 || strcmp(argv[6] , "steric2") == 0 || strcmp(argv[6] , "LJ") == 0 || strcmp(argv[6] , "LJ025") == 0) ;
     _triggers.stericType = argv[6];
-    _triggers.ranPot = (strcmp(argv[7] , "true") == 0 ) ;
+    _triggers.noHI = (strcmp(argv[7] , "true") == 0 ) ;
     _triggers.preEwald = (strcmp(argv[8] , "true") == 0 ) ;          // hpi exp
     int boolpar = 8;
 
@@ -73,12 +73,9 @@ int main(int argc, const char* argv[]){
     int instValIndex;                             //Counter for addInstantValue
     const string sterictype = _triggers.stericType;
 
-    bool HI = false;
 
     //HI
-    if (_modelpar.polymersize != 0){
-        HI = true;
-
+    if (!_triggers.noHI){
         if (_triggers.fitRPinv == true){
             std::string filename = "../rfitInvRP.py"; // The python script should lie in the folder "above" Release, i.e. where the C++ files are, such that it is tracked by git
             std::string command = "python ";
@@ -88,11 +85,20 @@ int main(int argc, const char* argv[]){
             system(command.c_str());
             sleep(3);         //make the programme wait for 5 seconds, such that fit script can finish
         }
+        //TODO LJ vs steric
+        if (_triggers.stericType!="steric" && _triggers.stericType!="steric2" && _triggers.noLub) {
+            cout << "!!! Error: Lubrication is disabled.\nActivating steric interaction is vital!!";
+            return 4;
+        }
+        if (_triggers.preEwald && _triggers.ranSpheres) {
+            cout << "!!! Error: preEwald does not work with ranSpheres";
+            return 4;
+        }
     }
-    //TODO LJ vs steric
-    if (_triggers.stericType!="steric" && _triggers.stericType!="steric2" && _triggers.noLub) {
-        cout << "!!! Error: Lubrication is disabled.\nActivating steric interaction is vital!!";
-        return 4;
+    else {// case of no HI reset meaningless triggers
+        _triggers.fitRPinv = false;
+        _triggers.noLub = false;
+        _triggers.preEwald = false;
     }
     
     
@@ -104,7 +110,10 @@ int main(int argc, const char* argv[]){
             cout << "Error: _triggers.ranRod && _modelpar.ustrength !=0.\ncalcmobility forces not yet implemented" << endl;
             return 4;
     }
-    
+    if (_triggers.ranSpheres && _modelpar.EwaldTest !=1){
+            cout << "Error: For ranSpheres you need EwaldTest == 1" << endl;
+            return 4;
+    }
 
 
 
@@ -197,7 +206,7 @@ int main(int argc, const char* argv[]){
             ifdebug(if (i%50==0){cout << i;};)
             // calc HI mobility matrix here, since it needs to be defined for random force normalisation
 
-            if (HI){ // Calculate displacement and update mobilityMatrix if it is larger than 0.1*tracer Radius
+            if (!_triggers.noHI){ // Calculate displacement and update mobilityMatrix if it is larger than 0.1*tracer Radius
                 if (!_triggers.preEwald) conf.checkDisplacementforMM();
                 else conf.calcTracerMobilityMatrix(false); //It is IMPORTANT that this is false. Otherwise There will be errors!
             }
@@ -249,15 +258,17 @@ int main(int argc, const char* argv[]){
             else if (sterictype=="steric"){
                 int cnt=0;
                 while (_triggers.includeSteric && conf.testOverlap()){
+                    //cout << "moveback!" << endl;
                     conf.moveBack();
                     conf.calcStochasticForces();
                     stepcheck = conf.makeStep();
                     ifdebug ((cout << "moveBack!");) //conf.moveBackReport();)
                     cnt++;
-                    if (cnt==3000){
-                    cout << "Bad particle position. Cannot avoid overlap with moveBack." << endl;
-                    conf.saveXYZTraj(("tmptrajMakeStepErr.xyz"), 0, "w");
-                    return 4;
+                    if (cnt==3000){//3000
+                        cout << "Bad particle position. Cannot avoid overlap with moveBack." << endl;
+                        conf.report("Bad Position for Steric.");
+                        conf.saveXYZTraj(("tmptrajMakeStepErr.xyz"), 0, "w");
+                        return 4;
                     }
                 }
                 boxcheck = conf.checkBoxCrossing(); //check if particle has crossed the confinement of the box

@@ -37,6 +37,7 @@ struct sim_triggers {
     bool trueRan;
     bool ranRod;
     bool preEwald;
+    bool noHI;
     string stericType;
 };
 

@@ -305,7 +305,6 @@ private:
     void updateMobilityMatrix();
     void initPolySpheres();
 
-    void report(std::string);
 
     template<typename T>
     string toString(const T& value){
@@ -357,6 +356,7 @@ public:
     string getTestCue(){ return _testcue; };
     void calcTracerMobilityMatrix(bool full);
 
+    void report(std::string);
 
 
     double _binv;
@@ -797,7 +797,7 @@ public:
         _noEwald = true;
         _n_cellsAlongb = 1;
         _boxsize=10*_n_cellsAlongb;
-        _binv=2/_boxsize;
+        _binv=2./_boxsize;
         _Vinv = 1./pow( _boxsize, 3 );
         _sphereoffset = (_boxsize/_n_cellsAlongb) / _edgeParticles;
         for (int i = 0; i < 3; i++){

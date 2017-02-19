@@ -30,7 +30,6 @@ CConfiguration::CConfiguration( double timestep, model_param_desc modelpar, sim_
     _boxsize = modelpar.boxsize;
     _n_cellsAlongb = modelpar.n_cells;
     _resetpos = (_boxsize/_n_cellsAlongb)/2; // puts the particle in the center of the cell at the origin
-    //_resetpos = (_boxsize)/2;
     _timestep = timestep;
     _ranSpheres = triggers.ranSpheres;
     _trueRan = triggers.trueRan;
@@ -63,9 +62,7 @@ CConfiguration::CConfiguration( double timestep, model_param_desc modelpar, sim_
     }
     
     //_ppos << 3.625, 4.375, 4.875;
-
-
-
+    cout << "Init HI parameters .." << endl;
     //Ewald sum stuff
     _nmax = modelpar.nmax; // This corresponds to the r_cutoff = _nmax * _boxsize
     _alpha = 1 * sqrt(M_PI) / _boxsize; // This value for alpha corresponds to the suggestion in Beenakker1986
@@ -92,20 +89,21 @@ CConfiguration::CConfiguration( double timestep, model_param_desc modelpar, sim_
 
     _Vinv = 1./pow( _boxsize, 3 );
     _cutoffMMsq = pow(0.05*_boxsize/_n_cellsAlongb,2);
-    if (_ranSpheres && _boxsize > 10) _cutoffMMsq = pow(0.025*_boxsize,2);
-    if (_polyrad != 0) _HI = true;
+    if (_ranSpheres && _boxsize > 10) _cutoffMMsq = pow(0.03*_boxsize/_n_cellsAlongb,2);
+    //if (_polyrad != 0) _HI = true;
     if (_EwaldTest != 0) _edgeParticles = _EwaldTest;
     else _edgeParticles = (int) ( ( _boxsize/_n_cellsAlongb )/modelpar.polymersize + 0.0001);// round down
     _sphereoffset = (_boxsize/_n_cellsAlongb) / _edgeParticles;
     if (_ranRod) initRodsVec();//Needs to be before initPolySpheres!
+    cout << "Init Polymer Spheres .." << endl;
     initPolySpheres();
-    if (_HI) {
+    if (!_triggers.noHI) {
         // TODO LJ
         //_LJPot = false;
     // THIS NEEDS TO COME LAST !!!!!!!
+        cout << "Init Mobility Matrix .." << endl;
         initConstMobilityMatrix();
         calcTracerMobilityMatrix(true);
-        cout << "$$$$$$$$$$$$$$$$$$$$$$$$\n\n\n$$$$$$$$$$$" << endl;
     //_pbc_corr = 1 - 1/(_N_polyspheres+1); // assign system size dependent value to pbc correction for tracer displacement in porous medium
     }
 
@@ -133,7 +131,7 @@ CConfiguration::CConfiguration( double timestep, model_param_desc modelpar, sim_
     iftestEwald(testRealSpcM(); testEwald(); )
     iftestLub2p(testLub2p();)
     
-    if (_triggers.preEwald==true){
+    if (_triggers.preEwald==true && !_triggers.noHI){
         _nxbins = (int)(0.5/_frac + 0.00001);
         cout << "precompute Resistance Matrix for nxbins = " << _nxbins << endl;
         initTrafoMatrixes();
@@ -223,29 +221,37 @@ int CConfiguration::makeStep(){
     bool v_nan = true;
     bool lrgDrift = true;
     int tmp  = 0;
-    while (v_nan || lrgDrift){  // This loop repeats until the the midpoint scheme does not result in a NaN anymore!
-        _V0dt = _tracerMM * (_f_mob * _timestep + _f_sto * _mu_sto);
-        //TODO del noHI
-        //_V0dt = Eigen::Matrix3d::Identity() * (_f_mob * _timestep + _f_sto * _mu_sto);
+    if ( _triggers.noHI == true ){_V0dt = (_f_mob * _timestep + _f_sto * _mu_sto);} // tracerMM = 1
+    else{
+        while (v_nan || lrgDrift){  // This loop repeats until the the midpoint scheme does not result in a NaN anymore!
+            _V0dt = _tracerMM * (_f_mob * _timestep + _f_sto * _mu_sto);
+            //TODO del noHI
+            //_V0dt = Eigen::Matrix3d::Identity() * (_f_mob * _timestep + _f_sto * _mu_sto);
 
 
-        if (_HI && !_noLub) _Vdriftdt = midpointScheme(_V0dt, _f_mob);   //TODO  Enable mid-point-scheme / backflow
+            if (!_noLub) _Vdriftdt = midpointScheme(_V0dt, _f_mob);   //TODO  Enable mid-point-scheme / backflow
 
-        v_nan = std::isnan(_Vdriftdt(0));
-        lrgDrift = (_Vdriftdt.squaredNorm() > 2);
+            v_nan = std::isnan(_Vdriftdt(0));
+            lrgDrift = (_Vdriftdt.squaredNorm() > 2);
 
-        if (v_nan || lrgDrift) {
-            cout << "is Nan = " << v_nan << "    -   largeDrift? = " << lrgDrift << endl;
-            cout << "_Vdriftdt.squaredNorm() = " << _Vdriftdt.squaredNorm() << endl;
-            calcStochasticForces();
-            //cout << "drifCorrection: Vdrift^2 = " << _Vdriftdt.squaredNorm() <<  endl;
-            tmp++;
-            cout << tmp << endl;
+            if (v_nan || lrgDrift) {
+                cout << "is Nan = " << v_nan << "    -   largeDrift? = " << lrgDrift << endl;
+                cout << "_Vdriftdt.squaredNorm() = " << _Vdriftdt.squaredNorm() << endl;
+                calcStochasticForces();
+                //cout << "drifCorrection: Vdrift^2 = " << _Vdriftdt.squaredNorm() <<  endl;
+                tmp++;
+                cout << tmp << endl;
+            }
         }
     }
 
     // Update particle position
     _ppos += (_V0dt + _Vdriftdt) ;
+    //cout << "---------\n_prevpos\n" << _prevpos << "\ndisplacement\n" << (_V0dt + _Vdriftdt) << endl;
+    
+    if ((_V0dt + _Vdriftdt)(0) > 0.5){
+        cout << "........... big jump!" << endl;
+    }
 
     //cout << (_prevpos - _ppos).norm() << endl << "--------" << endl;
     if (std::isnan(_ppos(0))){
@@ -298,7 +304,7 @@ int CConfiguration::checkBoxCrossing(){
                 //cout << "[["<<i<<"," << exitmarker <<"] ";
                 //prinRodPos(0); // cout print rod pos!
             }
-            if (_ppos(i) > _boxsize){
+            if ( (_ppos(i) > _boxsize) || (_ppos(i) < -1.) ){
                 cout << "Error: _ppos is outside of allowed range 0 < _ppos < _boxsize!";
                 report("Invalid _ppos range!");
                 return 1;
@@ -343,7 +349,7 @@ void CConfiguration::calcStochasticForces(){
     ran_v(1) = ran_gen();
     ran_v(2) = ran_gen();
 
-    if (_HI){
+    if (!_triggers.noHI){
         // return correlated random vector, which is scaled later by sqrt(2 dt)
         //_f_sto = _RMLub.llt().matrixL() * ran_v;
         _f_sto = Cholesky3x3(_RMLub)  * ran_v;
@@ -424,17 +430,30 @@ void CConfiguration::calcMobilityForces(){
 void CConfiguration::calcMobForcesBeads(){
     //reset mobility forces to zero
     _f_mob = Vector3d::Zero();
-    //calc mobility forces between the tracer and all monomer beads
-    Vector3d vrij;
-    Vector3d Fr=Vector3d::Zero();
-    double U = 0;
-    for (unsigned int j = 0; j < _N_polyspheres; j++){
-        vrij = minImage(_ppos - _polySpheres[j].pos);
-        double rij = vrij.norm();
-        U+=_potStrength * exp(-1 * rij / _potRange);
-        Fr+=U / (_potRange * rij) * vrij;
+    const double LJcutSq = 1.25992 * _stericrSq;
+    if (_potStrength!=0 || _LJPot){
+      //calc mobility forces between the tracer and all monomer beads
+      Vector3d vrij;
+      Vector3d F=Vector3d::Zero();
+      double U = 0;
+      for (unsigned int j = 0; j < _N_polyspheres; j++){
+          vrij = minImage(_ppos - _polySpheres[j].pos);
+          double rSq = vrij.squaredNorm();
+          double rij = sqrt(rSq);
+          // distance cutoff here
+          if (_potStrength!=0 &&  (rij - (_polyrad+_pradius) < 6*_potRange)){
+              U+=_potStrength * exp(-1 * rij / _potRange);
+              F+=U / (_potRange * rij) * vrij;
+          }
+          if (_LJPot && ( rSq < LJcutSq )){
+              double frtmp = 0;
+              calcLJPot(rSq, U, frtmp);
+              F += frtmp*vrij;
+          }
+      }
+      _f_mob += F;
+      //cout << F << endl;
     }
-    _f_mob += Fr;
 }
 
 
@@ -548,7 +567,7 @@ bool CConfiguration::testOverlap(double stericrSq_preE){
         Vector3d vrij;
         for (unsigned int j = 0; j < _N_polyspheres; j++){
             vrij = minImage(_ppos - _polySpheres[j].pos);
-            if (vrij.squaredNorm() <= _stericrSq + 0.00001){
+            if (vrij.squaredNorm() <= _stericrSq+0.001){
                 return true;
             }
         }
@@ -709,7 +728,7 @@ void CConfiguration::initPolySpheres(){
 
     if (_ranSpheres){ // This serves to assign a random position to the edgeparticles. Note: Only use it with _EwaldTest = 1!
         int retry = 0;
-        while (overlap==true && retry < 100){
+        while (overlap==true && retry < 1000){
             _polySpheres.clear();
             //create sphere in corner at origin
             _polySpheres.push_back( CPolySphere( Vector3d::Zero() ) );
@@ -726,7 +745,7 @@ void CConfiguration::initPolySpheres(){
                                 overlap = false;
                                 for (int k = 0; k<3; k++){
                                     //offset takes care that there is less chance of overlap for large polyrads
-                                    //it increases from 0 to 2*polyrad, for the cell at the origin and the one moste far away from it, respectively
+                                    //it increases from 0 to 2*polyrad, for the cell at the origin and the one most far away from it, respectively
                                     double offset = 2*_polyrad*(nvec.norm() / (sqrt(3)*(_n_cellsAlongb-1)));
                                     //cout << "offset = " << offset << endl;
                                     // Calculate random position of sphere spos
@@ -734,7 +753,7 @@ void CConfiguration::initPolySpheres(){
                                     if (_trueRan) spos(k) = _boxsize * zerotoone();
                                     //cout << "spos\n" <<spos << endl;
                                 }
-                                for (int l = 1; l < _N_polyspheres; l++){
+                                for (int l = 1; l < _polySpheres.size(); l++){
                                     vrij = minImage(spos - _polySpheres[l].pos);
                                     if (vrij.norm() < 2*_polyrad + 0.000001){
                                         overlap = true;
@@ -771,6 +790,7 @@ void CConfiguration::initPolySpheres(){
 //**************************** HYDRODYNAMICS ****************************************************//
 
 void CConfiguration::initConstMobilityMatrix(){
+    if (_triggers.noHI) return;
     double rxi = 0.0, ryi = 0.0, rzi = 0.0;
     double rij = 0.0, rijsq = 0.0;
     const double asq = _polyrad * _polyrad;
@@ -837,6 +857,7 @@ void CConfiguration::initConstMobilityMatrix(){
 
 
 void CConfiguration::calcTracerMobilityMatrix(bool full){
+    if (_triggers.noHI) return;
     const double asq = 0.5*(_polyrad * _polyrad + _pradius * _pradius);
 
     // vector for outer product in muij
@@ -921,6 +942,7 @@ void CConfiguration::calcTracerMobilityMatrix(bool full){
 
 
 void CConfiguration::updateMobilityMatrix(){// ONLY for ranRod, since I dont have pbc.
+    if (_triggers.noHI) return;
     const double asqPoly = _polyrad * _polyrad;
     const double asqTracer = 0.5*(_polyrad * _polyrad + _pradius * _pradius);
     Matrix3d muij = Matrix3d::Zero();

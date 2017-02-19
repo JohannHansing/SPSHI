@@ -44,6 +44,7 @@ void createDataFolder(string testcue){
     sprintf(range, "%.3f", _modelpar.urange);
     //In the definition of folder, the addition has to START WITH A STRING! for the compiler to know what to do (left to right).
     _files.folder = "sim_data/noreset";
+    if (_triggers.noHI) _files.folder = _files.folder + "/noHI";
     if (_triggers.fitRPinv) _files.folder = _files.folder + "/fitRPinv";
     if (_triggers.ranRod) _files.folder = _files.folder +  "/ranRod";
     if (_triggers.trueRan) _files.folder = _files.folder +  "/trueRan";
@@ -114,6 +115,7 @@ void parameterFile(string testcue){
     parameterFile << "nmax " << _modelpar.nmax << endl;
     parameterFile << "lubcutint " << _modelpar.lubcutint << endl;
     parameterFile << "preEwald " << _triggers.preEwald << endl;
+    parameterFile << "noHI " << _triggers.noHI << endl;
 
     parameterFile.close();
 }
