@@ -442,8 +442,9 @@ void CConfiguration::calcMobForcesBeads(){
           double rij = sqrt(rSq);
           // distance cutoff here
           if (_potStrength!=0 &&  (rij - (_polyrad+_pradius) < 6*_potRange)){
-              U+=_potStrength * exp(-1 * rij / _potRange);
-              F+=U / (_potRange * rij) * vrij;
+              double u = _potStrength * exp(-1 * rij / _potRange);
+              F += u / (_potRange * rij) * vrij;
+              U += u;
           }
           if (_LJPot && ( rSq < LJcutSq )){
               double frtmp = 0;
@@ -451,6 +452,7 @@ void CConfiguration::calcMobForcesBeads(){
               F += frtmp*vrij;
           }
       }
+      _upot = U;
       _f_mob += F;
       //cout << F << endl;
     }

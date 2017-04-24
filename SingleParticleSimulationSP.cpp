@@ -45,7 +45,7 @@ int main(int argc, const char* argv[]){
     _simpar.runs = atoi( argv[boolpar+1] );                       // Number of Simulation runs to get mean values from
     _simpar.timestep = atof( argv[boolpar+2] );
     _simpar.simtime = atoi( argv[boolpar+3] );                   // simulation time
-    _simpar.instantvalues = 200;
+    _simpar.instantvalues = 300000; //for dt1e-3: 300000, for dt5e-4: 600000 for subdiff test  - default 200
 
     _modelpar.rodDist = 0;                //Deprecated -- can use argv[boolpar+4] for sth else 
     _modelpar.boxsize = atof( argv[boolpar+5] );
@@ -125,7 +125,7 @@ int main(int argc, const char* argv[]){
 
 
     _simpar.steps = _simpar.simtime/_simpar.timestep;
-    _simpar.saveInt = _simpar.steps/_simpar.instantvalues;
+    _simpar.saveInt =_simpar.steps/_simpar.instantvalues;
     const int trajout = (int)(10/_simpar.timestep);
     const int MMcalcStep = (int)(0.05/_simpar.timestep);
 
@@ -296,7 +296,11 @@ int main(int argc, const char* argv[]){
 //             if (i==3) return 0;
 
         }
-        if ( (l%20 == 0) && _triggers.recordPosHisto ) conf.printHistoMatrix(_files.folder);
+        if ((l+1)%10 == 0){
+            if ( _triggers.recordPosHisto ) conf.printHistoMatrix(_files.folder);            
+            energyU.saveAverageInstantValues(_simpar.saveInt*_simpar.timestep);
+            squareDisp.saveAverageInstantValues(_simpar.saveInt*_simpar.timestep);
+        }
 
         if (l%100 == 0)  cout << "run " << toString(l) << endl;
     }//----------END OF RUNS-LOOP ----------------
