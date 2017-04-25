@@ -45,7 +45,7 @@ int main(int argc, const char* argv[]){
     _simpar.runs = atoi( argv[boolpar+1] );                       // Number of Simulation runs to get mean values from
     _simpar.timestep = atof( argv[boolpar+2] );
     _simpar.simtime = atoi( argv[boolpar+3] );                   // simulation time
-    _simpar.instantvalues = 300000; //for dt1e-3: 300000, for dt5e-4: 600000 for subdiff test  - default 200
+    _simpar.instantvalues = 200; //for dt1e-3: 300000, for dt5e-4: 600000 for subdiff test  - default 200
 
     _modelpar.rodDist = 0;                //Deprecated -- can use argv[boolpar+4] for sth else 
     _modelpar.boxsize = atof( argv[boolpar+5] );
