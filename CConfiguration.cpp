@@ -246,7 +246,8 @@ int CConfiguration::makeStep(){
     }
 
     // Update particle position
-    _ppos += (_V0dt + _Vdriftdt) ;
+    _vdisp = (_V0dt + _Vdriftdt);
+    _ppos += _vdisp;
     //cout << "---------\n_prevpos\n" << _prevpos << "\ndisplacement\n" << (_V0dt + _Vdriftdt) << endl;
     
     if ((_V0dt + _Vdriftdt)(0) > 0.5){

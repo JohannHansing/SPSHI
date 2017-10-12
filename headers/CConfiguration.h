@@ -100,6 +100,7 @@ public:
     Eigen::Vector3d _f_sto;
     Eigen::Vector3d _Vdriftdt;
     Eigen::Vector3d _V0dt;
+    Eigen::Vector3d _vdisp;
     
     //Steric interaction parameters
     double _stericrSq;
@@ -357,6 +358,11 @@ public:
     void calcTracerMobilityMatrix(bool full);
 
     void report(std::string);
+    
+
+    double getStepDisplacement(){
+        return _vdisp.squaredNorm();
+    }
 
 
     double _binv;

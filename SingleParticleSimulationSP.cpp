@@ -189,6 +189,10 @@ int main(int argc, const char* argv[]){
         cout << "ERROR !!!!!!!!!!!!!!!!\nThere is an OVERLAP between the polymer network and the particle start position!" << endl;
         return 1;
     }
+    
+    // stuff for running average of Ds
+    double avgDs = 0;
+    int nDs = 0;
 
 // ************** START OF RUNS-LOOP *****************
     for (int l = 0; l<_simpar.runs; l++){
@@ -287,6 +291,9 @@ int main(int argc, const char* argv[]){
             if (stepcount%trajout == 0) {
                 std::vector<double> ppos = conf.getppos();
                 trajectoryfile << fixed << stepcount * _simpar.timestep << "\t" << ppos[0] << " " << ppos[1] << " " << ppos[2] << endl;
+                nDs++;
+                avgDs = conf.getStepDisplacement()/_simpar.timestep / nDs + avgDs * (1. - 1./nDs);
+                //cout << avgDs << endl;
             }
             if (_triggers.recordPosHisto && ((i % 5) == 0)) conf.addHistoValue();
             
@@ -300,6 +307,8 @@ int main(int argc, const char* argv[]){
             if ( _triggers.recordPosHisto ) conf.printHistoMatrix(_files.folder);            
             energyU.saveAverageInstantValues(_simpar.saveInt*_simpar.timestep);
             squareDisp.saveAverageInstantValues(_simpar.saveInt*_simpar.timestep);
+            ofstream Dsfile;  Dsfile.open((_files.folder + "/InstantValues/Dsfile.txt").c_str());
+            Dsfile << avgDs/6. << endl; Dsfile.close();
         }
 
         if (l%100 == 0)  cout << "run " << toString(l) << endl;
@@ -327,6 +336,7 @@ int main(int argc, const char* argv[]){
 	end = clock();
 	double runtime = (double)((end-start)/(CLOCKS_PER_SEC));
 	cout << runtime << " seconds runtime." << endl;
+    //cout << "Average Ds: " << avgDs << endl;
 
     //TODO struct parametereFileAppend does not take folder as argument anymore
     parameterFileAppend(runtime);
