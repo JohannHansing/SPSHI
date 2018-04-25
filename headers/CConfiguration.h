@@ -217,6 +217,20 @@ public:
         cout << "relative to diagonal\n" << (tmp - _resMNoLub)/_resMNoLub(0,0) << endl;
     }
     
+    double getlubfrac(){
+        // return the fraction of the lubrication effect on the mobilitymatrix
+        // of course, this only works if lubrication is used to calculate _tracerMM !
+        double sumMnoLub  = invert3x3(_resMNoLub).sum();
+        double sumMLub    = _tracerMM.sum(); //this is with lub
+        return  1. - sumMLub/sumMnoLub;
+    }
+
+    void getLubDiffM(double &sumMdiff, double &sumMLub){
+        sumMLub  = _tracerMM.sum();
+        double sumMnoLub  = invert3x3(_resMNoLub).sum();
+        sumMdiff = sumMnoLub-sumMLub;
+    }
+    
     void storeResistanceTable(){
         cout << "storing precomputed Ewald table to file.." << endl;
         

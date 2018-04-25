@@ -45,7 +45,7 @@ int main(int argc, const char* argv[]){
     _simpar.runs = atoi( argv[boolpar+1] );                       // Number of Simulation runs to get mean values from
     _simpar.timestep = atof( argv[boolpar+2] );
     _simpar.simtime = atoi( argv[boolpar+3] );                   // simulation time
-    _simpar.instantvalues = 200; //for dt1e-3: 300000, for dt5e-4: 600000 for subdiff test  - default 200
+    _simpar.instantvalues = 200; // for HIpaper MSD plot 100000; //for dt1e-3: 300000, for dt5e-4: 600000 for subdiff test  - default 200
 
     _modelpar.rodDist = 0;                //Deprecated -- can use argv[boolpar+4] for sth else 
     _modelpar.boxsize = atof( argv[boolpar+5] );
@@ -126,7 +126,7 @@ int main(int argc, const char* argv[]){
 
     _simpar.steps = _simpar.simtime/_simpar.timestep;
     _simpar.saveInt =_simpar.steps/_simpar.instantvalues;
-    const int trajout = (int)(10/_simpar.timestep);
+    const int trajout = (int) (10./_simpar.timestep); //(int)(10/_simpar.timestep); 
     const int MMcalcStep = (int)(0.05/_simpar.timestep);
 
 
@@ -172,6 +172,11 @@ int main(int argc, const char* argv[]){
     unsigned int stepcount = 0;
     ofstream trajectoryfile;
     trajectoryfile.open((_files.folder + "/Coordinates/trajectory.txt").c_str());
+
+    ofstream lubfracfile;
+    lubfracfile.open((_files.folder + "/Coordinates/lubfracfile.txt").c_str());
+    ofstream hydrofricfile;
+    hydrofricfile.open((_files.folder + "/Coordinates/hydrofricfile.txt").c_str());
 
     // Write parameter file parameters.txt
     parameterFile(conf.getTestCue());
@@ -291,6 +296,11 @@ int main(int argc, const char* argv[]){
             if (stepcount%trajout == 0) {
                 std::vector<double> ppos = conf.getppos();
                 trajectoryfile << fixed << stepcount * _simpar.timestep << "\t" << ppos[0] << " " << ppos[1] << " " << ppos[2] << endl;
+                lubfracfile  << fixed << stepcount * _simpar.timestep << " " << conf.getlubfrac() << endl;
+                //alternative version to obtain lubrication friction effect:
+                double sumMdiff, sumMLub;
+                conf.getLubDiffM(sumMdiff, sumMLub);
+                hydrofricfile << fixed << stepcount * _simpar.timestep << " " << sumMdiff << " " << sumMLub <<  endl;
                 nDs++;
                 avgDs = conf.getStepDisplacement()/_simpar.timestep / nDs + avgDs * (1. - 1./nDs);
                 //cout << avgDs << endl;
@@ -341,7 +351,9 @@ int main(int argc, const char* argv[]){
     //TODO struct parametereFileAppend does not take folder as argument anymore
     parameterFileAppend(runtime);
 
-	trajectoryfile.close();
+    trajectoryfile.close();
+    lubfracfile.close();
+    hydrofricfile.close();
 
 
     return 0;
